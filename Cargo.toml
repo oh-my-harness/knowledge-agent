@@ -2,6 +2,7 @@
 members = [
   "crates/knowledge-agent-cli",
   "crates/knowledge-agent-core",
+  "crates/knowledge-agent-harness",
   "crates/knowledge-agent-server",
 ]
 resolver = "2"
@@ -13,13 +14,18 @@ version = "0.1.0"
 
 [workspace.dependencies]
 anyhow = "1"
+async-trait = "0.1"
 axum = "0.8"
 clap = { version = "4", features = ["derive"] }
 gray_matter = "0.2"
+llm-harness = { git = "https://github.com/oh-my-harness/llm-harness-core.git", package = "llm-harness" }
+llm-harness-loop = { git = "https://github.com/oh-my-harness/llm-harness-core.git", package = "llm-harness-loop" }
+llm_adapter = { git = "https://github.com/oh-my-harness/llm-api-adapter.git", rev = "c1d2cb87cb2bb94803144cfc28133a394b7fca18" }
 pulldown-cmark = "0.13"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
+thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
 toml = "0.9"
 walkdir = "2"

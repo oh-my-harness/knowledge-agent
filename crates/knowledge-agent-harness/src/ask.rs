@@ -1,0 +1,137 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use llm_adapter::deepseek;
+use llm_harness::prelude::{Agent, AgentMessage, AgentOptions, ContentBlock};
+use llm_harness_loop::LlmClient;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+const DEFAULT_DEEPSEEK_MODEL: &str = "deepseek-v4-flash";
+const SYSTEM_PROMPT: &str = "你是 Knowledge Agent，一个本地 Obsidian 知识库研究助手。当前版本尚未接入 vault 检索，所以不要声称已经阅读用户的本地知识库。请用中文简洁回答；如果问题需要本地知识库上下文，请说明需要后续接入检索后才能准确回答。";
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AskRequest {
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct AskResponse {
+    pub answer: String,
+}
+
+#[derive(Debug, Clone, Error)]
+pub enum AskError {
+    #[error("missing DEEPSEEK_API_KEY")]
+    MissingApiKey,
+    #[error("llm returned no assistant text")]
+    EmptyAnswer,
+    #[error("llm harness error: {0}")]
+    Harness(String),
+}
+
+#[async_trait]
+pub trait AskRunner: Send + Sync {
+    async fn ask(&self, request: AskRequest) -> Result<AskResponse, AskError>;
+}
+
+#[derive(Debug)]
+pub struct FakeAskRunner {
+    answer: String,
+}
+
+impl FakeAskRunner {
+    pub fn new(answer: impl Into<String>) -> Self {
+        Self {
+            answer: answer.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl AskRunner for FakeAskRunner {
+    async fn ask(&self, _request: AskRequest) -> Result<AskResponse, AskError> {
+        Ok(AskResponse {
+            answer: self.answer.clone(),
+        })
+    }
+}
+
+pub struct UnavailableAskRunner {
+    error: AskError,
+}
+
+impl UnavailableAskRunner {
+    pub fn new(error: AskError) -> Self {
+        Self { error }
+    }
+}
+
+#[async_trait]
+impl AskRunner for UnavailableAskRunner {
+    async fn ask(&self, _request: AskRequest) -> Result<AskResponse, AskError> {
+        Err(self.error.clone())
+    }
+}
+
+pub struct DeepSeekAskRunner {
+    api_key: String,
+    model: String,
+}
+
+impl DeepSeekAskRunner {
+    pub fn from_env() -> Result<Self, AskError> {
+        Self::from_env_with(|name| std::env::var(name).ok())
+    }
+
+    pub fn from_env_with(get_var: impl Fn(&str) -> Option<String>) -> Result<Self, AskError> {
+        let api_key = get_var("DEEPSEEK_API_KEY")
+            .filter(|value| !value.trim().is_empty())
+            .ok_or(AskError::MissingApiKey)?;
+        let model = get_var("DEEPSEEK_MODEL")
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| DEFAULT_DEEPSEEK_MODEL.to_string());
+
+        Ok(Self { api_key, model })
+    }
+}
+
+#[async_trait]
+impl AskRunner for DeepSeekAskRunner {
+    async fn ask(&self, request: AskRequest) -> Result<AskResponse, AskError> {
+        let client = Arc::new(deepseek::client(self.api_key.clone())) as Arc<dyn LlmClient>;
+        let mut options = AgentOptions::new(self.model.clone());
+        options.system_prompt = Some(SYSTEM_PROMPT.to_string());
+        let agent = Agent::new(client, options);
+
+        agent
+            .prompt(request.message)
+            .await
+            .map_err(|err| AskError::Harness(err.to_string()))?;
+
+        let answer = assistant_text(&agent.state().messages);
+        if answer.trim().is_empty() {
+            return Err(AskError::EmptyAnswer);
+        }
+
+        Ok(AskResponse { answer })
+    }
+}
+
+fn assistant_text(messages: &[AgentMessage]) -> String {
+    let mut output = String::new();
+
+    for message in messages {
+        let AgentMessage::Assistant(assistant) = message else {
+            continue;
+        };
+
+        for block in &assistant.content {
+            if let ContentBlock::Text { text } = block {
+                output.push_str(text);
+            }
+        }
+    }
+
+    output
+}
