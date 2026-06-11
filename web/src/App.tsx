@@ -1,14 +1,16 @@
-import { Activity, Database, ScanSearch, Settings } from "lucide-react";
+import { Activity, Database, MessageSquareText, ScanSearch, Settings } from "lucide-react";
 import { useState } from "react";
+import { AskPage } from "./pages/AskPage";
 import { MaintenancePage } from "./pages/MaintenancePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { StatusPage } from "./pages/StatusPage";
 import { VaultPage } from "./pages/VaultPage";
 
-type Page = "status" | "vault" | "maintenance" | "settings";
+type Page = "status" | "ask" | "vault" | "maintenance" | "settings";
 
 const navItems: Array<{ id: Page; label: string; icon: typeof Activity }> = [
   { id: "status", label: "服务状态", icon: Activity },
+  { id: "ask", label: "提问", icon: MessageSquareText },
   { id: "vault", label: "知识库", icon: Database },
   { id: "maintenance", label: "维护扫描", icon: ScanSearch },
   { id: "settings", label: "设置", icon: Settings }
@@ -46,6 +48,7 @@ export function App() {
       </aside>
       <main className="content">
         {page === "status" && <StatusPage />}
+        {page === "ask" && <AskPage />}
         {page === "vault" && <VaultPage />}
         {page === "maintenance" && <MaintenancePage />}
         {page === "settings" && <SettingsPage />}

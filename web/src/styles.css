@@ -207,6 +207,67 @@ button {
   padding: 4px 7px;
 }
 
+.ask-page {
+  min-height: calc(100vh - 56px);
+  grid-template-rows: auto minmax(220px, 1fr) auto auto;
+}
+
+.message-list {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.message {
+  max-width: 720px;
+  border: 1px solid #d8dde6;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px 14px;
+}
+
+.message.user {
+  justify-self: end;
+  background: #eef4ff;
+}
+
+.message span {
+  display: block;
+  margin-bottom: 5px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.message p {
+  margin: 0;
+}
+
+.ask-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.ask-form textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #cbd2df;
+  border-radius: 8px;
+  font: inherit;
+  padding: 10px 12px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;
