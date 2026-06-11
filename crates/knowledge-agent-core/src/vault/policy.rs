@@ -38,9 +38,7 @@ impl VaultWritePolicy {
         match operation {
             VaultWriteOperation::AddIndexEntry { .. }
             | VaultWriteOperation::UpdateFrontmatterField { .. }
-            | VaultWriteOperation::MarkNonSemanticMetadata { .. } => {
-                WriteDecision::AllowAutomatic
-            }
+            | VaultWriteOperation::MarkNonSemanticMetadata { .. } => WriteDecision::AllowAutomatic,
             VaultWriteOperation::ModifyBodyMeaning { .. }
             | VaultWriteOperation::DeleteNote { .. }
             | VaultWriteOperation::MoveNote { .. } => WriteDecision::RequireConfirmation,

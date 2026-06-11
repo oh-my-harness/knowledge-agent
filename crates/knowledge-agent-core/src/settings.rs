@@ -34,8 +34,8 @@ pub fn load_vault_settings(vault_root: &Path) -> Result<VaultSettings> {
         return Ok(VaultSettings::default());
     }
 
-    let raw = fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let raw =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
     let settings = toml::from_str::<VaultSettings>(&raw)
         .with_context(|| format!("failed to parse {}", path.display()))?;
     Ok(settings)
