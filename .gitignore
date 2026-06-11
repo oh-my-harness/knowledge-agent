@@ -1,0 +1,5 @@
+.superpowers/
+.knowledge-agent/
+target/
+node_modules/
+dist/
