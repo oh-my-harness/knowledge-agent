@@ -44,3 +44,22 @@ async fn maintenance_scan_returns_json() {
 
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn maintenance_scan_errors_for_missing_vault() {
+    let missing_vault = Path::new(env!("CARGO_MANIFEST_DIR")).join("missing-vault");
+    let app = build_router(AppState::new(missing_vault));
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/maintenance/scan")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
