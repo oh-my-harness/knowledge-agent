@@ -5,8 +5,8 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
-use knowledge_agent_harness as harness;
 use knowledge_agent_core::{maintenance::checks::run_maintenance_scan, vault::scanner::scan_vault};
+use knowledge_agent_harness as harness;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
@@ -78,14 +78,16 @@ async fn ask(
     }
 
     let answer = match request.mode {
-        AskMode::Vault => state
-            .ask_runner
-            .ask(harness::AskRequest {
-                message: request.message,
-            })
-            .await
-            .map_err(ask_error)?
-            .answer,
+        AskMode::Vault => {
+            state
+                .ask_runner
+                .ask(harness::AskRequest {
+                    message: request.message,
+                })
+                .await
+                .map_err(ask_error)?
+                .answer
+        }
     };
 
     Ok(Json(AskResponse {

@@ -68,10 +68,7 @@ async fn maintenance_scan_errors_for_missing_vault() {
 async fn ask_returns_runner_answer() {
     let vault = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../knowledge-agent-core/tests/fixtures/basic-vault");
-    let app = build_router(AppState::new_with_fake_ask_runner(
-        vault,
-        "fake llm answer",
-    ));
+    let app = build_router(AppState::new_with_fake_ask_runner(vault, "fake llm answer"));
 
     let response = app
         .oneshot(
