@@ -67,7 +67,10 @@ async fn maintenance_scan(State(state): State<AppState>) -> ApiResult<impl Seria
 
 async fn ask(Json(request): Json<AskRequest>) -> ApiResult<AskResponse> {
     if request.message.trim().is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "message cannot be empty".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "message cannot be empty".to_string(),
+        ));
     }
 
     let answer = match request.mode {
