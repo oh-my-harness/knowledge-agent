@@ -89,6 +89,124 @@ button {
   padding: 28px;
 }
 
+.page {
+  display: grid;
+  gap: 18px;
+  max-width: 1040px;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page-header h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.page-header span,
+.muted {
+  color: #667085;
+}
+
+.status-pill {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 600;
+}
+
+.status-pill.loading {
+  background: #fff7d6;
+  color: #7a5800;
+}
+
+.status-pill.online {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-pill.offline,
+.error-text {
+  color: #b42318;
+}
+
+.status-pill.offline {
+  background: #fee4e2;
+}
+
+.note-list,
+.inbox-list {
+  display: grid;
+  gap: 10px;
+}
+
+.note-row,
+.inbox-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #d8dde6;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.note-row h3,
+.inbox-item h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.note-row p,
+.inbox-item p {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.tag {
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1f4fbf;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.primary-button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: #1f6feb;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 0 14px;
+}
+
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.priority {
+  align-self: flex-start;
+  border-radius: 6px;
+  background: #fee4e2;
+  color: #b42318;
+  font-weight: 700;
+  padding: 4px 7px;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;
