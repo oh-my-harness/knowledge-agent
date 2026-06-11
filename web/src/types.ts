@@ -31,3 +31,19 @@ export interface MaintenanceItem {
 export interface MaintenanceInbox {
   items: MaintenanceItem[];
 }
+
+export interface AskRequest {
+  message: string;
+  mode: "vault";
+}
+
+export interface AskSource {
+  title: string;
+  path: string;
+}
+
+export interface AskResponse {
+  answer: string;
+  sources: AskSource[];
+  requires_followup: boolean;
+}

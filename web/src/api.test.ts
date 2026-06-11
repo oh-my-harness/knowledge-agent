@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getHealth, getVaultIndex, runMaintenanceScan } from "./api";
+import { askVault, getHealth, getVaultIndex, runMaintenanceScan } from "./api";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -42,6 +42,19 @@ describe("api client", () => {
     });
     const inbox = await runMaintenanceScan();
     expect(inbox.items[0].kind).toBe("broken_wikilink");
+  });
+
+  it("asks the vault through the ask endpoint", async () => {
+    mockFetch({ answer: "收到", sources: [], requires_followup: false });
+
+    const response = await askVault("什么是 Agent Harness？");
+
+    expect(response.answer).toBe("收到");
+    expect(fetch).toHaveBeenCalledWith("/api/ask", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "什么是 Agent Harness？", mode: "vault" })
+    });
   });
 
   it("throws useful error for failed requests", async () => {

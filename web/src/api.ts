@@ -1,4 +1,4 @@
-import type { HealthResponse, MaintenanceInbox, VaultScan } from "./types";
+import type { AskResponse, HealthResponse, MaintenanceInbox, VaultScan } from "./types";
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
@@ -18,4 +18,12 @@ export function getVaultIndex(): Promise<VaultScan> {
 
 export function runMaintenanceScan(): Promise<MaintenanceInbox> {
   return requestJson<MaintenanceInbox>("/api/maintenance/scan", { method: "POST" });
+}
+
+export function askVault(message: string): Promise<AskResponse> {
+  return requestJson<AskResponse>("/api/ask", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ message, mode: "vault" })
+  });
 }
