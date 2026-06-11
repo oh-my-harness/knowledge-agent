@@ -47,3 +47,17 @@ cd web
 npm test
 npm run build
 ```
+
+## LLM 配置
+
+当前第一版 LLM 接入使用 `llm-harness-core` 的 DeepSeek 示例路径。启动后端前设置：
+
+```powershell
+$env:DEEPSEEK_API_KEY="sk-..."
+$env:DEEPSEEK_MODEL="deepseek-v4-flash"
+cargo run -p knowledge-agent-cli -- serve . --port 3030
+```
+
+`DEEPSEEK_MODEL` 可省略，默认使用 `deepseek-v4-flash`。
+
+如果没有设置 `DEEPSEEK_API_KEY`，`/api/ask` 会返回明确错误。API key 属于个人配置，不应提交到 Git；后续会迁移到 `.knowledge-agent/local.toml`。
