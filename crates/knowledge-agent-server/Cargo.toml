@@ -8,6 +8,7 @@ version.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 knowledge-agent-core = { path = "../knowledge-agent-core" }
+knowledge-agent-harness = { path = "../knowledge-agent-harness" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

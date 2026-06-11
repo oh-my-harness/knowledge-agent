@@ -5,6 +5,7 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
+use knowledge_agent_harness as harness;
 use knowledge_agent_core::{maintenance::checks::run_maintenance_scan, vault::scanner::scan_vault};
 use serde::{Deserialize, Serialize};
 
@@ -65,7 +66,10 @@ async fn maintenance_scan(State(state): State<AppState>) -> ApiResult<impl Seria
         .map_err(internal_error)
 }
 
-async fn ask(Json(request): Json<AskRequest>) -> ApiResult<AskResponse> {
+async fn ask(
+    State(state): State<AppState>,
+    Json(request): Json<AskRequest>,
+) -> ApiResult<AskResponse> {
     if request.message.trim().is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -74,9 +78,14 @@ async fn ask(Json(request): Json<AskRequest>) -> ApiResult<AskResponse> {
     }
 
     let answer = match request.mode {
-        AskMode::Vault => {
-            "已收到你的问题。当前提问通路已经连通，后续会接入知识库检索和 LLM Harness。".to_string()
-        }
+        AskMode::Vault => state
+            .ask_runner
+            .ask(harness::AskRequest {
+                message: request.message,
+            })
+            .await
+            .map_err(ask_error)?
+            .answer,
     };
 
     Ok(Json(AskResponse {
@@ -87,5 +96,9 @@ async fn ask(Json(request): Json<AskRequest>) -> ApiResult<AskResponse> {
 }
 
 fn internal_error(err: anyhow::Error) -> (StatusCode, String) {
+    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+}
+
+fn ask_error(err: harness::AskError) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
 }
