@@ -1,4 +1,5 @@
 .superpowers/
+.worktrees/
 .knowledge-agent/
 target/
 node_modules/
