@@ -1,0 +1,16 @@
+[package]
+name = "knowledge-agent-core"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+gray_matter.workspace = true
+pulldown-cmark.workspace = true
+serde.workspace = true
+toml.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

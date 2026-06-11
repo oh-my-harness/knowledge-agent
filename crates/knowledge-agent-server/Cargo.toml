@@ -1,0 +1,13 @@
+[package]
+name = "knowledge-agent-server"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+knowledge-agent-core = { path = "../knowledge-agent-core" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true

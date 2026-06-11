@@ -1,0 +1,15 @@
+[package]
+name = "knowledge-agent-cli"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "knowledge-agent"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+knowledge-agent-server = { path = "../knowledge-agent-server" }
+tokio.workspace = true
