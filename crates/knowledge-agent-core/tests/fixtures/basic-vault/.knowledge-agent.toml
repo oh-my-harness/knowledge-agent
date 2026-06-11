@@ -1,0 +1,5 @@
+docs_dir = "docs"
+research_dir = "docs/research"
+concepts_dir = "docs/concepts"
+index_file_name = "_index.md"
+required_frontmatter = ["title", "type", "created", "updated"]
