@@ -37,11 +37,21 @@ impl VaultWritePolicy {
     pub fn decide(&self, operation: &VaultWriteOperation) -> WriteDecision {
         match operation {
             VaultWriteOperation::AddIndexEntry { .. }
-            | VaultWriteOperation::UpdateFrontmatterField { .. }
             | VaultWriteOperation::MarkNonSemanticMetadata { .. } => WriteDecision::AllowAutomatic,
+            VaultWriteOperation::UpdateFrontmatterField { field, .. } => {
+                if is_low_risk_frontmatter_field(field) {
+                    WriteDecision::AllowAutomatic
+                } else {
+                    WriteDecision::RequireConfirmation
+                }
+            }
             VaultWriteOperation::ModifyBodyMeaning { .. }
             | VaultWriteOperation::DeleteNote { .. }
             | VaultWriteOperation::MoveNote { .. } => WriteDecision::RequireConfirmation,
         }
     }
+}
+
+fn is_low_risk_frontmatter_field(field: &str) -> bool {
+    matches!(field, "created" | "updated")
 }

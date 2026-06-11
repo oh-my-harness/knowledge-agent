@@ -30,6 +30,30 @@ fn write_policy_allows_only_low_risk_automatic_writes() {
     );
 
     assert_eq!(
+        policy.decide(&VaultWriteOperation::UpdateFrontmatterField {
+            path: "docs/concepts/agent-harness.md".to_string(),
+            field: "updated".to_string(),
+        }),
+        WriteDecision::AllowAutomatic
+    );
+
+    assert_eq!(
+        policy.decide(&VaultWriteOperation::UpdateFrontmatterField {
+            path: "docs/concepts/agent-harness.md".to_string(),
+            field: "title".to_string(),
+        }),
+        WriteDecision::RequireConfirmation
+    );
+
+    assert_eq!(
+        policy.decide(&VaultWriteOperation::UpdateFrontmatterField {
+            path: "docs/concepts/agent-harness.md".to_string(),
+            field: "tags".to_string(),
+        }),
+        WriteDecision::RequireConfirmation
+    );
+
+    assert_eq!(
         policy.decide(&VaultWriteOperation::ModifyBodyMeaning {
             path: "docs/concepts/agent-harness.md".to_string(),
         }),
