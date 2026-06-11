@@ -21,3 +21,29 @@ cargo run -p knowledge-agent-cli -- serve crates/knowledge-agent-core/tests/fixt
 - `GET /api/health`
 - `GET /api/vault/index`
 - `POST /api/maintenance/scan`
+
+## Web UI 开发
+
+先启动 Rust 后端：
+
+```bash
+cargo run -p knowledge-agent-cli -- serve crates/knowledge-agent-core/tests/fixtures/basic-vault --port 3030
+```
+
+再启动前端开发服务器：
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Vite 会把 `/api/*` 请求代理到 `http://127.0.0.1:3030`。
+
+前端验证命令：
+
+```bash
+cd web
+npm test
+npm run build
+```
