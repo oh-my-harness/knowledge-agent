@@ -63,3 +63,47 @@ async fn maintenance_scan_errors_for_missing_vault() {
 
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }
+
+#[tokio::test]
+async fn ask_returns_placeholder_answer() {
+    let vault = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../knowledge-agent-core/tests/fixtures/basic-vault");
+    let app = build_router(AppState::new(vault));
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/ask")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"message":"什么是 Agent Harness？","mode":"vault"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn ask_rejects_empty_message() {
+    let vault = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../knowledge-agent-core/tests/fixtures/basic-vault");
+    let app = build_router(AppState::new(vault));
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/ask")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"message":"   ","mode":"vault"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}

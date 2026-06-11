@@ -6,11 +6,36 @@ use axum::{
     routing::{get, post},
 };
 use knowledge_agent_core::{maintenance::checks::run_maintenance_scan, vault::scanner::scan_vault};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 struct HealthResponse {
     status: &'static str,
+}
+
+#[derive(Debug, Deserialize)]
+struct AskRequest {
+    message: String,
+    mode: AskMode,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum AskMode {
+    Vault,
+}
+
+#[derive(Debug, Serialize)]
+struct AskResponse {
+    answer: String,
+    sources: Vec<AskSource>,
+    requires_followup: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct AskSource {
+    title: String,
+    path: String,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -18,6 +43,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/health", get(health))
         .route("/api/vault/index", get(vault_index))
         .route("/api/maintenance/scan", post(maintenance_scan))
+        .route("/api/ask", post(ask))
         .with_state(state)
 }
 
@@ -37,6 +63,24 @@ async fn maintenance_scan(State(state): State<AppState>) -> ApiResult<impl Seria
     run_maintenance_scan(&state.vault_root)
         .map(Json)
         .map_err(internal_error)
+}
+
+async fn ask(Json(request): Json<AskRequest>) -> ApiResult<AskResponse> {
+    if request.message.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "message cannot be empty".to_string()));
+    }
+
+    let answer = match request.mode {
+        AskMode::Vault => {
+            "已收到你的问题。当前提问通路已经连通，后续会接入知识库检索和 LLM Harness。".to_string()
+        }
+    };
+
+    Ok(Json(AskResponse {
+        answer,
+        sources: Vec::new(),
+        requires_followup: false,
+    }))
 }
 
 fn internal_error(err: anyhow::Error) -> (StatusCode, String) {
