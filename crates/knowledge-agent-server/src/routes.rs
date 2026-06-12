@@ -176,6 +176,7 @@ async fn save_settings(
     Json(settings): Json<LocalSettings>,
 ) -> ApiResult<LocalSettingsResponse> {
     save_local_settings(&state.vault_root, &settings).map_err(internal_error)?;
+    state.reload_ask_runner();
     Ok(Json(settings_response(settings)))
 }
 
@@ -218,7 +219,7 @@ async fn ask(
     let answer = match request.mode {
         AskMode::Vault => {
             state
-                .ask_runner
+                .ask_runner()
                 .ask(harness::AskRequest {
                     message: request.message,
                     session_id: request.session_id,
@@ -238,7 +239,7 @@ async fn ask(
 
 async fn list_ask_sessions(State(state): State<AppState>) -> ApiResult<impl Serialize> {
     state
-        .ask_runner
+        .ask_runner()
         .list_sessions()
         .await
         .map(Json)
@@ -257,7 +258,7 @@ async fn create_ask_session(
     }
 
     state
-        .ask_runner
+        .ask_runner()
         .create_session(request.name)
         .await
         .map(Json)
@@ -277,7 +278,7 @@ async fn rename_ask_session(
     }
 
     state
-        .ask_runner
+        .ask_runner()
         .rename_session(session_id, request.name)
         .await
         .map(Json)
@@ -289,7 +290,7 @@ async fn delete_ask_session(
     Path(session_id): Path<String>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     state
-        .ask_runner
+        .ask_runner()
         .delete_session(session_id)
         .await
         .map(|_| StatusCode::NO_CONTENT)
@@ -301,7 +302,7 @@ async fn ask_session_messages(
     Path(session_id): Path<String>,
 ) -> ApiResult<impl Serialize> {
     state
-        .ask_runner
+        .ask_runner()
         .session_messages(session_id)
         .await
         .map(Json)
@@ -314,7 +315,7 @@ async fn ask_events(
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, (StatusCode, String)> {
     let session_id = query.session_id.unwrap_or_else(|| "default".to_string());
     let receiver = state
-        .ask_runner
+        .ask_runner()
         .subscribe_events(session_id)
         .await
         .map_err(ask_error)?;

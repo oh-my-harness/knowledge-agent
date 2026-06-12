@@ -317,7 +317,7 @@ describe("App", () => {
         }
       })
     });
-    expect(await screen.findByText("设置已保存。LLM 和网页搜索配置会在服务重启后用于新 runner。")).toBeInTheDocument();
+    expect(await screen.findByText("设置已保存。LLM 和网页搜索配置会用于后续请求。")).toBeInTheDocument();
   });
 
   it("asks a question with Enter and shows the assistant reply", async () => {

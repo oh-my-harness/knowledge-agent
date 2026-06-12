@@ -125,7 +125,7 @@ Web 设置页会读写：
 .knowledge-agent/local.toml
 ```
 
-该文件保存本机 LLM provider、DeepSeek API key、模型名和网页搜索配置。保存后的 LLM 配置会在服务重启后用于新 runner。
+该文件保存本机 LLM provider、DeepSeek API key、模型名和网页搜索配置。保存后会自动重载后端 runner，并用于后续请求。
 
 配置优先级：
 
@@ -133,7 +133,7 @@ Web 设置页会读写：
 2. 环境变量 `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL`
 3. 默认模型名 `deepseek-v4-flash`
 
-设置页不会展示环境变量中的真实 API Key，但会显示当前有效 Key 是否来自环境变量。若在设置页填写 API Key，保存后会写入本地配置，并在服务重启后优先使用。
+设置页不会展示环境变量中的真实 API Key，但会显示当前有效 Key 是否来自环境变量。若在设置页填写 API Key，保存后会写入本地配置，并立即优先用于后续请求。
 
 聊天会话由 `llm-harness-core` 的 session 机制保存到：
 

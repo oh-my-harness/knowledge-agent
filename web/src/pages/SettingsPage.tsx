@@ -51,7 +51,7 @@ export function SettingsPage() {
         web_search: settings.web_search
       });
       setSettings(saved);
-      setMessage("设置已保存。LLM 和网页搜索配置会在服务重启后用于新 runner。");
+      setMessage("设置已保存。LLM 和网页搜索配置会用于后续请求。");
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存设置失败");
     } finally {

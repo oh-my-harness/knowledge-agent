@@ -6,7 +6,7 @@ use knowledge_agent_core::vault::confirmation::{
     CreateReplaceNoteConfirmation, create_replace_note_confirmation,
 };
 use knowledge_agent_server::{AppState, build_router, build_router_with_static};
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 use tower::ServiceExt;
 
 #[tokio::test]
@@ -150,6 +150,32 @@ async fn local_settings_can_be_saved_and_loaded() {
     assert_eq!(json["web_search"]["enabled"], true);
     assert_eq!(json["effective"]["deepseek_api_key_configured"], true);
     assert_eq!(json["effective"]["deepseek_api_key_source"], "local");
+}
+
+#[tokio::test]
+async fn saving_settings_reloads_ask_runner() {
+    let vault = tempfile::tempdir().expect("tempdir");
+    let state = AppState::new_with_fake_ask_runner(vault.path().to_path_buf(), "fake llm answer");
+    let original_runner = state.ask_runner();
+    let app = build_router(state.clone());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/local")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"llm":{"provider":"deepseek","deepseek_api_key":"secret","deepseek_model":"deepseek-chat"},"web_search":{"enabled":true,"provider":"duckduckgo"}}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let reloaded_runner = state.ask_runner();
+    assert!(!Arc::ptr_eq(&original_runner, &reloaded_runner));
 }
 
 #[tokio::test]
