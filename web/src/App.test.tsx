@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -257,21 +257,21 @@ describe("App", () => {
 
     await screen.findByText("默认回答");
     const messageList = screen.getByLabelText("消息");
-    expect(messageList.scrollTop).toBe(1000);
+    await waitFor(() => expect(messageList.scrollTop).toBe(1000));
 
     messageList.scrollTop = 120;
     fireEvent.scroll(messageList);
 
     await userEvent.click(screen.getByRole("button", { name: "研究会话" }));
     await screen.findByText("研究回答");
-    expect(messageList.scrollTop).toBe(1000);
+    await waitFor(() => expect(messageList.scrollTop).toBe(1000));
 
     messageList.scrollTop = 240;
     fireEvent.scroll(messageList);
 
     await userEvent.click(screen.getByRole("button", { name: "默认会话" }));
     await screen.findByText("默认回答");
-    expect(messageList.scrollTop).toBe(120);
+    await waitFor(() => expect(messageList.scrollTop).toBe(120));
 
     scrollHeight.mockRestore();
   });

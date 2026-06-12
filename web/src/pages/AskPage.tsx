@@ -18,6 +18,7 @@ export function AskPage() {
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const sessionScrollPositions = useRef<Record<string, number>>({});
   const pendingScrollSession = useRef<string | null>(null);
+  const restoreScrollFrames = useRef<number[]>([]);
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId),
     [activeSessionId, sessions]
@@ -89,8 +90,23 @@ export function AskPage() {
     }
 
     const savedPosition = sessionScrollPositions.current[activeSessionId];
-    messageList.scrollTop = savedPosition ?? messageList.scrollHeight;
-    pendingScrollSession.current = null;
+    restoreScrollFrames.current.forEach((frame) => cancelAnimationFrame(frame));
+    restoreScrollFrames.current = [];
+
+    const firstFrame = requestAnimationFrame(() => {
+      const secondFrame = requestAnimationFrame(() => {
+        messageList.scrollTop = savedPosition ?? messageList.scrollHeight;
+        pendingScrollSession.current = null;
+        restoreScrollFrames.current = [];
+      });
+      restoreScrollFrames.current = [secondFrame];
+    });
+    restoreScrollFrames.current = [firstFrame];
+
+    return () => {
+      restoreScrollFrames.current.forEach((frame) => cancelAnimationFrame(frame));
+      restoreScrollFrames.current = [];
+    };
   }, [activeSessionId, isLoadingMessages, messages]);
 
   useEffect(() => {
@@ -177,6 +193,10 @@ export function AskPage() {
   }
 
   function handleMessageListScroll(event: UIEvent<HTMLDivElement>) {
+    if (pendingScrollSession.current === activeSessionId) {
+      return;
+    }
+
     sessionScrollPositions.current[activeSessionId] = event.currentTarget.scrollTop;
   }
 
