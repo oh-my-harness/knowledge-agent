@@ -1,5 +1,5 @@
 import { FormEvent, KeyboardEvent, UIEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Pencil, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
@@ -22,6 +22,7 @@ export function AskPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [isSessionPanelVisible, setIsSessionPanelVisible] = useState(true);
   const [agentActivity, setAgentActivity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
@@ -259,58 +260,75 @@ export function AskPage() {
     <section className="page ask-page">
       <header className="page-header">
         <h2>提问</h2>
-        <span>{activeSession?.name ?? activeSessionId}</span>
+        <div className="ask-header-actions">
+          <span>{activeSession?.name ?? activeSessionId}</span>
+          <button
+            aria-label={isSessionPanelVisible ? "隐藏会话管理" : "显示会话管理"}
+            className="icon-button"
+            onClick={() => setIsSessionPanelVisible((visible) => !visible)}
+            title={isSessionPanelVisible ? "隐藏会话管理" : "显示会话管理"}
+            type="button"
+          >
+            {isSessionPanelVisible ? (
+              <ChevronsLeft aria-hidden="true" size={17} />
+            ) : (
+              <ChevronsRight aria-hidden="true" size={17} />
+            )}
+          </button>
+        </div>
       </header>
-      <div className="chat-layout">
-        <aside className="session-panel" aria-label="会话">
-          <form className="session-form" onSubmit={handleCreateSession}>
-            <label className="sr-only" htmlFor="session-name">
-              新会话名称
-            </label>
-            <input
-              id="session-name"
-              value={sessionName}
-              onChange={(event) => setSessionName(event.target.value)}
-              placeholder="新会话名称"
-            />
-            <button className="primary-button" disabled={sessionName.trim().length === 0} type="submit">
-              新建
-            </button>
-          </form>
-          <div className="session-list">
-            {sessions.map((session) => (
-              <div
-                className={`session-item ${session.id === activeSessionId ? "active" : ""}`}
-                key={session.id}
-              >
-                <button className="session-select" onClick={() => setActiveSessionId(session.id)} type="button">
-                  <span>{session.name}</span>
-                  {session.updated_at && <small>{new Date(session.updated_at).toLocaleString()}</small>}
-                </button>
-                <div className="session-actions">
-                  <button
-                    aria-label={`重命名会话 ${session.name}`}
-                    className="icon-button"
-                    onClick={() => void handleRenameSession(session)}
-                    title="重命名"
-                    type="button"
-                  >
-                    <Pencil aria-hidden="true" size={15} />
+      <div className={`chat-layout ${isSessionPanelVisible ? "" : "sessions-hidden"}`}>
+        {isSessionPanelVisible && (
+          <aside className="session-panel" aria-label="会话">
+            <form className="session-form" onSubmit={handleCreateSession}>
+              <label className="sr-only" htmlFor="session-name">
+                新会话名称
+              </label>
+              <input
+                id="session-name"
+                value={sessionName}
+                onChange={(event) => setSessionName(event.target.value)}
+                placeholder="新会话名称"
+              />
+              <button className="primary-button" disabled={sessionName.trim().length === 0} type="submit">
+                新建
+              </button>
+            </form>
+            <div className="session-list">
+              {sessions.map((session) => (
+                <div
+                  className={`session-item ${session.id === activeSessionId ? "active" : ""}`}
+                  key={session.id}
+                >
+                  <button className="session-select" onClick={() => setActiveSessionId(session.id)} type="button">
+                    <span>{session.name}</span>
+                    {session.updated_at && <small>{new Date(session.updated_at).toLocaleString()}</small>}
                   </button>
-                  <button
-                    aria-label={`删除会话 ${session.name}`}
-                    className="icon-button danger"
-                    onClick={() => void handleDeleteSession(session)}
-                    title="删除"
-                    type="button"
-                  >
-                    <Trash2 aria-hidden="true" size={15} />
-                  </button>
+                  <div className="session-actions">
+                    <button
+                      aria-label={`重命名会话 ${session.name}`}
+                      className="icon-button"
+                      onClick={() => void handleRenameSession(session)}
+                      title="重命名"
+                      type="button"
+                    >
+                      <Pencil aria-hidden="true" size={15} />
+                    </button>
+                    <button
+                      aria-label={`删除会话 ${session.name}`}
+                      className="icon-button danger"
+                      onClick={() => void handleDeleteSession(session)}
+                      title="删除"
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" size={15} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </aside>
+              ))}
+            </div>
+          </aside>
+        )}
         <div
           className="message-list"
           aria-label="消息"

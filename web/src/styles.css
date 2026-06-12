@@ -180,6 +180,19 @@ button {
   color: #667085;
 }
 
+.ask-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ask-header-actions span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status-pill {
   width: fit-content;
   border-radius: 999px;
@@ -425,6 +438,10 @@ button {
   gap: 14px;
   min-height: 0;
   overflow: hidden;
+}
+
+.chat-layout.sessions-hidden {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .session-panel {

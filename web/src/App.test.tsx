@@ -373,6 +373,22 @@ describe("App", () => {
     expect(fetch).toHaveBeenCalledWith("/api/ask/sessions/renamed", { method: "DELETE" });
   });
 
+  it("can hide and restore the session panel", async () => {
+    mockSessionActionFetch();
+    render(<App />);
+
+    expect(await screen.findByRole("complementary", { name: "会话" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "隐藏会话管理" }));
+
+    expect(screen.queryByRole("complementary", { name: "会话" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "显示会话管理" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "显示会话管理" }));
+
+    expect(await screen.findByRole("complementary", { name: "会话" })).toBeInTheDocument();
+  });
+
   it("scrolls sessions to the latest message when opened", async () => {
     const scrollHeight = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(1000);
     const clientHeight = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(400);
