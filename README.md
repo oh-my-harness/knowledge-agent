@@ -105,6 +105,14 @@ cd dist\knowledge-agent
 .\knowledge-agent.exe serve <你的 Obsidian vault 路径>
 ```
 
+验证打包产物：
+
+```powershell
+.\scripts\verify-package.ps1
+```
+
+该脚本会创建临时 vault、执行 `init`、启动打包后的服务，并检查 Web 首页和 `/api/health`。
+
 ## LLM 配置
 
 当前第一版 LLM 接入使用 `llm-harness-core` 的 DeepSeek 示例路径。启动后端前设置：
