@@ -73,6 +73,19 @@ struct AskActivityEvent {
     detail: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+struct LocalSettingsResponse {
+    #[serde(flatten)]
+    settings: LocalSettings,
+    effective: EffectiveLocalSettings,
+}
+
+#[derive(Debug, Serialize)]
+struct EffectiveLocalSettings {
+    deepseek_api_key_configured: bool,
+    deepseek_api_key_source: Option<&'static str>,
+}
+
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/api/health", get(health))
@@ -144,8 +157,9 @@ async fn reject_confirmation_route(
         .map_err(internal_error)
 }
 
-async fn local_settings(State(state): State<AppState>) -> ApiResult<LocalSettings> {
+async fn local_settings(State(state): State<AppState>) -> ApiResult<LocalSettingsResponse> {
     load_local_settings(&state.vault_root)
+        .map(settings_response)
         .map(Json)
         .map_err(internal_error)
 }
@@ -153,9 +167,34 @@ async fn local_settings(State(state): State<AppState>) -> ApiResult<LocalSetting
 async fn save_settings(
     State(state): State<AppState>,
     Json(settings): Json<LocalSettings>,
-) -> ApiResult<LocalSettings> {
+) -> ApiResult<LocalSettingsResponse> {
     save_local_settings(&state.vault_root, &settings).map_err(internal_error)?;
-    Ok(Json(settings))
+    Ok(Json(settings_response(settings)))
+}
+
+fn settings_response(settings: LocalSettings) -> LocalSettingsResponse {
+    let local_key_configured = settings
+        .llm
+        .deepseek_api_key
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty());
+    let env_key_configured =
+        std::env::var("DEEPSEEK_API_KEY").is_ok_and(|value| !value.trim().is_empty());
+    let deepseek_api_key_source = if local_key_configured {
+        Some("local")
+    } else if env_key_configured {
+        Some("environment")
+    } else {
+        None
+    };
+
+    LocalSettingsResponse {
+        settings,
+        effective: EffectiveLocalSettings {
+            deepseek_api_key_configured: local_key_configured || env_key_configured,
+            deepseek_api_key_source,
+        },
+    }
 }
 
 async fn ask(

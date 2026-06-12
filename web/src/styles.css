@@ -769,6 +769,12 @@ button {
   font-weight: 600;
 }
 
+.field-hint {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .field input,
 .field select {
   min-height: 38px;

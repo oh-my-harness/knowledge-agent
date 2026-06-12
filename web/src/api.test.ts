@@ -42,6 +42,10 @@ const settings: LocalSettings = {
   web_search: {
     enabled: false,
     provider: "duckduckgo"
+  },
+  effective: {
+    deepseek_api_key_configured: false,
+    deepseek_api_key_source: null
   }
 };
 
@@ -63,7 +67,10 @@ describe("api client", () => {
     expect(fetch).toHaveBeenCalledWith("/api/settings/local", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...settings, web_search: { enabled: true, provider: "duckduckgo" } })
+      body: JSON.stringify({
+        llm: settings.llm,
+        web_search: { enabled: true, provider: "duckduckgo" }
+      })
     });
   });
 

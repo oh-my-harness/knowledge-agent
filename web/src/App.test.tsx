@@ -25,6 +25,10 @@ function localSettings() {
     web_search: {
       enabled: false,
       provider: "duckduckgo"
+    },
+    effective: {
+      deepseek_api_key_configured: true,
+      deepseek_api_key_source: "environment"
     }
   };
 }
@@ -290,6 +294,7 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "设置" }));
     expect(await screen.findByLabelText("模型名")).toHaveValue("deepseek-v4-flash");
     expect(screen.getByLabelText("DeepSeek API Key")).toHaveValue("");
+    expect(screen.getByText(/当前通过 DEEPSEEK_API_KEY 环境变量配置/)).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "启用网页搜索工具" })).not.toBeChecked();
 
     await userEvent.clear(await screen.findByLabelText("模型名"));

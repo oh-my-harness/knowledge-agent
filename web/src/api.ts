@@ -26,10 +26,11 @@ export function getLocalSettings(): Promise<LocalSettings> {
 }
 
 export function saveLocalSettings(settings: LocalSettings): Promise<LocalSettings> {
+  const { effective: _effective, ...payload } = settings;
   return requestJson<LocalSettings>("/api/settings/local", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(settings)
+    body: JSON.stringify(payload)
   });
 }
 

@@ -17,11 +17,13 @@ impl AppState {
             local_settings.web_search.enabled && local_settings.web_search.provider == "duckduckgo";
         let ask_runner: Arc<dyn AskRunner> = match DeepSeekAskRunner::from_env_with_options(
             |name| {
-                std::env::var(name).ok().or_else(|| match name {
+                let local_value = match name {
                     "DEEPSEEK_API_KEY" => local_settings.llm.deepseek_api_key.clone(),
                     "DEEPSEEK_MODEL" => Some(local_settings.llm.deepseek_model.clone()),
                     _ => None,
-                })
+                }
+                .filter(|value| !value.trim().is_empty());
+                local_value.or_else(|| std::env::var(name).ok())
             },
             Some(sessions_root),
             "default".to_string(),

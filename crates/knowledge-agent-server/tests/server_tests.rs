@@ -108,6 +108,8 @@ async fn local_settings_can_be_saved_and_loaded() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["llm"]["deepseek_model"], "deepseek-chat");
     assert_eq!(json["web_search"]["enabled"], true);
+    assert_eq!(json["effective"]["deepseek_api_key_configured"], true);
+    assert_eq!(json["effective"]["deepseek_api_key_source"], "local");
 }
 
 #[tokio::test]

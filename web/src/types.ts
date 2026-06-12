@@ -52,6 +52,10 @@ export interface LocalSettings {
     enabled: boolean;
     provider: string;
   };
+  effective?: {
+    deepseek_api_key_configured: boolean;
+    deepseek_api_key_source: "local" | "environment" | null;
+  };
 }
 
 export interface AskRequest {

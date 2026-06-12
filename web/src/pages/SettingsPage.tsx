@@ -59,6 +59,14 @@ export function SettingsPage() {
     }
   }
 
+  const apiKeySource = settings.effective?.deepseek_api_key_source;
+  const apiKeyHint =
+    apiKeySource === "local"
+      ? "当前使用本地配置中的 API Key。"
+      : apiKeySource === "environment"
+        ? "当前通过 DEEPSEEK_API_KEY 环境变量配置；在这里输入会保存到本地配置，并在服务重启后优先使用。"
+        : "当前没有可用 API Key。";
+
   return (
     <section className="page settings-page">
       <header className="page-header">
@@ -87,11 +95,13 @@ export function SettingsPage() {
               </select>
             </label>
 
-            <label className="field">
+            <label className="field" htmlFor="deepseek-api-key">
               <span>DeepSeek API Key</span>
               <span className="secret-input">
                 <input
+                  aria-label="DeepSeek API Key"
                   autoComplete="off"
+                  id="deepseek-api-key"
                   type={showApiKey ? "text" : "password"}
                   value={settings.llm.deepseek_api_key ?? ""}
                   onChange={(event) =>
@@ -111,6 +121,7 @@ export function SettingsPage() {
                   {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </span>
+              <small className="field-hint">{apiKeyHint}</small>
             </label>
 
             <label className="field">
