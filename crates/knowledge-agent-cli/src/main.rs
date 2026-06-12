@@ -15,6 +15,8 @@ enum Command {
         vault: PathBuf,
         #[arg(long, default_value_t = 3030)]
         port: u16,
+        #[arg(long)]
+        web_dir: Option<PathBuf>,
     },
 }
 
@@ -22,8 +24,12 @@ enum Command {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Serve { vault, port } => {
-            knowledge_agent_server::serve(vault, port).await?;
+        Command::Serve {
+            vault,
+            port,
+            web_dir,
+        } => {
+            knowledge_agent_server::serve(vault, port, web_dir).await?;
         }
     }
     Ok(())

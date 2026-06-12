@@ -13,6 +13,7 @@ knowledge-agent-harness = { path = "../knowledge-agent-harness" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+tower-http.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

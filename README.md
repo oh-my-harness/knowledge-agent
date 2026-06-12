@@ -2,21 +2,33 @@
 
 Knowledge Agent 是一个本地运行的研究助手和 Obsidian vault 维护工具。
 
-## 基础命令
+## 使用方式
 
 在 Obsidian vault 根目录运行：
 
-```bash
+```powershell
 knowledge-agent serve .
+```
+
+如果当前目录存在 `web/dist/index.html`，服务会自动加载 Web UI。也可以显式指定前端静态文件目录：
+
+```powershell
+knowledge-agent serve . --web-dir .\web\dist
+```
+
+启动后访问：
+
+```text
+http://127.0.0.1:3030
 ```
 
 开发时可以使用 fixture vault 运行：
 
-```bash
+```powershell
 cargo run -p knowledge-agent-cli -- serve crates/knowledge-agent-core/tests/fixtures/basic-vault --port 3030
 ```
 
-当前 foundation 阶段提供的接口：
+主要接口：
 
 - `GET /api/health`
 - `GET /api/vault/index`
@@ -24,6 +36,8 @@ cargo run -p knowledge-agent-cli -- serve crates/knowledge-agent-core/tests/fixt
 - `GET /api/confirmations`
 - `POST /api/confirmations/{id}/apply`
 - `POST /api/confirmations/{id}/reject`
+- `GET /api/ask/sessions`
+- `POST /api/ask`
 
 ## Web UI 开发
 
@@ -51,6 +65,33 @@ npm test
 npm run build
 ```
 
+## 打包
+
+Windows 下可以使用：
+
+```powershell
+.\scripts\package.ps1
+```
+
+脚本会执行：
+
+- `npm --prefix web install`
+- `npm --prefix web run build`
+- `cargo build --release -p knowledge-agent-cli`
+
+产物输出到：
+
+```text
+dist/knowledge-agent/
+```
+
+运行打包产物：
+
+```powershell
+cd dist\knowledge-agent
+.\knowledge-agent.exe serve <你的 Obsidian vault 路径> --web-dir .\web\dist
+```
+
 ## LLM 配置
 
 当前第一版 LLM 接入使用 `llm-harness-core` 的 DeepSeek 示例路径。启动后端前设置：
@@ -71,7 +112,15 @@ Web 设置页会读写：
 .knowledge-agent/local.toml
 ```
 
-该文件保存本机 LLM provider、DeepSeek API key、模型名和网页搜索配置。环境变量仍可覆盖对应配置；保存后的 LLM 配置会在服务重启后用于新 runner。
+该文件保存本机 LLM provider、DeepSeek API key、模型名和网页搜索配置。保存后的 LLM 配置会在服务重启后用于新 runner。
+
+配置优先级：
+
+1. `.knowledge-agent/local.toml`
+2. 环境变量 `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL`
+3. 默认模型名 `deepseek-v4-flash`
+
+设置页不会展示环境变量中的真实 API Key，但会显示当前有效 Key 是否来自环境变量。若在设置页填写 API Key，保存后会写入本地配置，并在服务重启后优先使用。
 
 聊天会话由 `llm-harness-core` 的 session 机制保存到：
 
@@ -101,6 +150,7 @@ Web 聊天界面支持多个会话：
 - `vault_read_note`：读取指定 Markdown 笔记内容。
 - `vault_search_notes`：按纯文本搜索笔记内容。
 - `vault_neighbor_notes`：查看指定笔记的出链和反链。
+- `web_search`：启用网页搜索后使用 DuckDuckGo 搜索公开网页，返回标题、链接和摘要。
 
 当前也接入了第一版编辑工具：
 

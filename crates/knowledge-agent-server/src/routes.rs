@@ -17,8 +17,9 @@ use knowledge_agent_core::{
 };
 use knowledge_agent_harness as harness;
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, sync::Arc, time::Duration};
+use std::{convert::Infallible, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::broadcast;
+use tower_http::services::{ServeDir, ServeFile};
 
 #[derive(Debug, Serialize)]
 struct HealthResponse {
@@ -113,6 +114,12 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/ask/events", get(ask_events))
         .route("/api/ask", post(ask))
         .with_state(state)
+}
+
+pub fn build_router_with_static(state: AppState, web_dir: PathBuf) -> Router {
+    let service =
+        ServeDir::new(&web_dir).not_found_service(ServeFile::new(web_dir.join("index.html")));
+    build_router(state).fallback_service(service)
 }
 
 async fn health() -> Json<HealthResponse> {

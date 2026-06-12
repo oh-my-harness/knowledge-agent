@@ -5,15 +5,14 @@ use axum::{
 use knowledge_agent_core::vault::confirmation::{
     CreateReplaceNoteConfirmation, create_replace_note_confirmation,
 };
-use knowledge_agent_server::{AppState, build_router};
+use knowledge_agent_server::{AppState, build_router, build_router_with_static};
 use std::path::Path;
 use tower::ServiceExt;
 
 #[tokio::test]
 async fn health_returns_ok() {
-    let vault = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../knowledge-agent-core/tests/fixtures/basic-vault");
-    let app = build_router(AppState::new(vault));
+    let vault = tempfile::tempdir().expect("tempdir");
+    let app = build_router(AppState::new(vault.path().to_path_buf()));
 
     let response = app
         .oneshot(
@@ -26,6 +25,47 @@ async fn health_returns_ok() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn router_can_serve_built_web_ui() {
+    let vault = tempfile::tempdir().expect("vault tempdir");
+    let web = tempfile::tempdir().expect("web tempdir");
+    std::fs::write(
+        web.path().join("index.html"),
+        "<main>Knowledge Agent</main>",
+    )
+    .unwrap();
+    let app = build_router_with_static(
+        AppState::new_with_fake_ask_runner(vault.path().to_path_buf(), "fake llm answer"),
+        web.path().to_path_buf(),
+    );
+
+    let page_response = app
+        .clone()
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(page_response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(page_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert!(
+        String::from_utf8(body.to_vec())
+            .unwrap()
+            .contains("Knowledge Agent")
+    );
+
+    let api_response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(api_response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -322,9 +362,8 @@ async fn ask_reports_missing_llm_configuration() {
         std::env::remove_var("DEEPSEEK_API_KEY");
     }
 
-    let vault = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../knowledge-agent-core/tests/fixtures/basic-vault");
-    let app = build_router(AppState::new(vault));
+    let vault = tempfile::tempdir().expect("tempdir");
+    let app = build_router(AppState::new(vault.path().to_path_buf()));
 
     let response = app
         .oneshot(
