@@ -34,7 +34,19 @@ export interface MaintenanceInbox {
 
 export interface AskRequest {
   message: string;
+  session_id?: string;
   mode: "vault";
+}
+
+export interface ChatSession {
+  id: string;
+  name: string;
+  updated_at: string | null;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
 }
 
 export interface AskSource {

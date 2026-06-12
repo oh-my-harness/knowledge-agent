@@ -94,6 +94,50 @@ async fn ask_returns_runner_answer() {
 }
 
 #[tokio::test]
+async fn ask_sessions_can_be_listed_created_and_loaded() {
+    let vault = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../knowledge-agent-core/tests/fixtures/basic-vault");
+    let app = build_router(AppState::new_with_fake_ask_runner(vault, "fake llm answer"));
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/ask/sessions")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/ask/sessions")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"name":"research"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+
+    let messages_response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/ask/sessions/research/messages")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(messages_response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn ask_rejects_empty_message() {
     let vault = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../knowledge-agent-core/tests/fixtures/basic-vault");

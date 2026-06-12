@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -23,11 +24,33 @@ const SYSTEM_PROMPT: &str = "你是 Knowledge Agent，一个本地 Obsidian 知�
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AskRequest {
     pub message: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct AskResponse {
     pub answer: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ChatSession {
+    pub id: String,
+    pub name: String,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ChatMessage {
+    pub role: ChatRole,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChatRole {
+    User,
+    Assistant,
 }
 
 #[derive(Debug, Clone, Error)]
@@ -45,6 +68,9 @@ pub enum AskError {
 #[async_trait]
 pub trait AskRunner: Send + Sync {
     async fn ask(&self, request: AskRequest) -> Result<AskResponse, AskError>;
+    async fn list_sessions(&self) -> Result<Vec<ChatSession>, AskError>;
+    async fn create_session(&self, name: String) -> Result<ChatSession, AskError>;
+    async fn session_messages(&self, session_id: String) -> Result<Vec<ChatMessage>, AskError>;
 }
 
 #[derive(Debug)]
@@ -67,6 +93,22 @@ impl AskRunner for FakeAskRunner {
             answer: self.answer.clone(),
         })
     }
+
+    async fn list_sessions(&self) -> Result<Vec<ChatSession>, AskError> {
+        Ok(vec![default_chat_session()])
+    }
+
+    async fn create_session(&self, name: String) -> Result<ChatSession, AskError> {
+        Ok(ChatSession {
+            id: normalize_session_id(&name),
+            name,
+            updated_at: None,
+        })
+    }
+
+    async fn session_messages(&self, _session_id: String) -> Result<Vec<ChatMessage>, AskError> {
+        Ok(Vec::new())
+    }
 }
 
 pub struct UnavailableAskRunner {
@@ -84,6 +126,22 @@ impl AskRunner for UnavailableAskRunner {
     async fn ask(&self, _request: AskRequest) -> Result<AskResponse, AskError> {
         Err(self.error.clone())
     }
+
+    async fn list_sessions(&self) -> Result<Vec<ChatSession>, AskError> {
+        Ok(vec![default_chat_session()])
+    }
+
+    async fn create_session(&self, name: String) -> Result<ChatSession, AskError> {
+        Ok(ChatSession {
+            id: normalize_session_id(&name),
+            name,
+            updated_at: None,
+        })
+    }
+
+    async fn session_messages(&self, _session_id: String) -> Result<Vec<ChatMessage>, AskError> {
+        Ok(Vec::new())
+    }
 }
 
 pub struct DeepSeekAskRunner {
@@ -92,7 +150,7 @@ pub struct DeepSeekAskRunner {
     sessions_root: Option<PathBuf>,
     session_name: String,
     vault_root: Option<PathBuf>,
-    harness: Mutex<Option<HarnessAskRunner>>,
+    harnesses: Mutex<HashMap<String, HarnessAskRunner>>,
 }
 
 impl DeepSeekAskRunner {
@@ -144,40 +202,120 @@ impl DeepSeekAskRunner {
             sessions_root,
             session_name,
             vault_root,
-            harness: Mutex::new(None),
+            harnesses: Mutex::new(HashMap::new()),
         })
+    }
+
+    fn tools(&self) -> Vec<Arc<dyn Tool>> {
+        self.vault_root
+            .as_ref()
+            .map(|vault_root| vault_read_tools(vault_root.clone()))
+            .unwrap_or_default()
+    }
+
+    async fn build_harness(&self, session_id: &str) -> Result<HarnessAskRunner, AskError> {
+        let client = Arc::new(deepseek::client(self.api_key.clone())) as Arc<dyn LlmClient>;
+        let tools = self.tools();
+        if let Some(sessions_root) = &self.sessions_root {
+            HarnessAskRunner::new_jsonl(
+                client,
+                self.model.clone(),
+                sessions_root,
+                session_id.to_string(),
+                tools,
+            )
+            .await
+        } else {
+            Ok(HarnessAskRunner::new_in_memory_with_tools(client, self.model.clone(), tools).await)
+        }
     }
 }
 
 #[async_trait]
 impl AskRunner for DeepSeekAskRunner {
     async fn ask(&self, request: AskRequest) -> Result<AskResponse, AskError> {
-        let mut harness = self.harness.lock().await;
-        if harness.is_none() {
-            let client = Arc::new(deepseek::client(self.api_key.clone())) as Arc<dyn LlmClient>;
-            let tools = self
-                .vault_root
-                .as_ref()
-                .map(|vault_root| vault_read_tools(vault_root.clone()))
-                .unwrap_or_default();
-            *harness = Some(if let Some(sessions_root) = &self.sessions_root {
-                HarnessAskRunner::new_jsonl(
-                    client,
-                    self.model.clone(),
-                    sessions_root,
-                    self.session_name.clone(),
-                    tools,
-                )
-                .await?
-            } else {
-                HarnessAskRunner::new_in_memory_with_tools(client, self.model.clone(), tools).await
-            });
+        let session_id = request
+            .session_id
+            .as_deref()
+            .map(normalize_session_id)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| self.session_name.clone());
+        let mut harnesses = self.harnesses.lock().await;
+        if !harnesses.contains_key(&session_id) {
+            let harness = self.build_harness(&session_id).await?;
+            harnesses.insert(session_id.clone(), harness);
         }
 
-        harness
-            .as_ref()
+        harnesses
+            .get(&session_id)
             .expect("harness initialized before ask")
             .ask(request)
+            .await
+    }
+
+    async fn list_sessions(&self) -> Result<Vec<ChatSession>, AskError> {
+        let Some(sessions_root) = &self.sessions_root else {
+            return Ok(vec![default_chat_session()]);
+        };
+        tokio::fs::create_dir_all(sessions_root)
+            .await
+            .map_err(|err| AskError::Session(err.to_string()))?;
+        let repo = JsonlSessionRepo::new(sessions_root);
+        let sessions = repo
+            .list(ListSessionOptions::default())
+            .await
+            .map_err(|err| AskError::Session(err.to_string()))?
+            .into_iter()
+            .filter_map(|metadata| {
+                let name = metadata.name?;
+                Some(ChatSession {
+                    id: name.clone(),
+                    name,
+                    updated_at: Some(metadata.updated_at.to_rfc3339()),
+                })
+            })
+            .collect::<Vec<_>>();
+
+        if sessions.is_empty() {
+            Ok(vec![default_chat_session()])
+        } else {
+            Ok(sessions)
+        }
+    }
+
+    async fn create_session(&self, name: String) -> Result<ChatSession, AskError> {
+        let session_id = normalize_session_id(&name);
+        if session_id.is_empty() {
+            return Err(AskError::Session(
+                "session name cannot be empty".to_string(),
+            ));
+        }
+
+        let mut harnesses = self.harnesses.lock().await;
+        if !harnesses.contains_key(&session_id) {
+            let harness = self.build_harness(&session_id).await?;
+            harnesses.insert(session_id.clone(), harness);
+        }
+
+        Ok(ChatSession {
+            id: session_id.clone(),
+            name: session_id,
+            updated_at: None,
+        })
+    }
+
+    async fn session_messages(&self, session_id: String) -> Result<Vec<ChatMessage>, AskError> {
+        let session_id = normalize_session_id(&session_id);
+        let mut harnesses = self.harnesses.lock().await;
+        if !harnesses.contains_key(&session_id) {
+            let harness = self.build_harness(&session_id).await?;
+            harnesses.insert(session_id.clone(), harness);
+        }
+
+        harnesses
+            .get(&session_id)
+            .expect("harness initialized before reading messages")
+            .conversation_messages()
             .await
     }
 }
@@ -288,6 +426,11 @@ impl HarnessAskRunner {
             .map_err(|err| AskError::Harness(err.to_string()))?;
         Ok(context.messages)
     }
+
+    pub async fn conversation_messages(&self) -> Result<Vec<ChatMessage>, AskError> {
+        let messages = self.context_messages().await?;
+        Ok(to_chat_messages(&messages))
+    }
 }
 
 #[async_trait]
@@ -317,6 +460,22 @@ impl AskRunner for HarnessAskRunner {
 
         Ok(AskResponse { answer })
     }
+
+    async fn list_sessions(&self) -> Result<Vec<ChatSession>, AskError> {
+        Ok(vec![default_chat_session()])
+    }
+
+    async fn create_session(&self, name: String) -> Result<ChatSession, AskError> {
+        Ok(ChatSession {
+            id: normalize_session_id(&name),
+            name,
+            updated_at: None,
+        })
+    }
+
+    async fn session_messages(&self, _session_id: String) -> Result<Vec<ChatMessage>, AskError> {
+        self.conversation_messages().await
+    }
 }
 
 fn assistant_text(messages: &[AgentMessage]) -> String {
@@ -335,4 +494,46 @@ fn assistant_text(messages: &[AgentMessage]) -> String {
     }
 
     output
+}
+
+fn to_chat_messages(messages: &[AgentMessage]) -> Vec<ChatMessage> {
+    messages
+        .iter()
+        .filter_map(|message| match message {
+            AgentMessage::User(user) => Some(ChatMessage {
+                role: ChatRole::User,
+                content: text_blocks(&user.content),
+            }),
+            AgentMessage::Assistant(assistant) => {
+                let content = text_blocks(&assistant.content);
+                (!content.trim().is_empty()).then_some(ChatMessage {
+                    role: ChatRole::Assistant,
+                    content,
+                })
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn text_blocks(blocks: &[ContentBlock]) -> String {
+    let mut output = String::new();
+    for block in blocks {
+        if let ContentBlock::Text { text } = block {
+            output.push_str(text);
+        }
+    }
+    output
+}
+
+fn normalize_session_id(value: &str) -> String {
+    value.trim().replace(['\\', '/'], "-")
+}
+
+fn default_chat_session() -> ChatSession {
+    ChatSession {
+        id: "default".to_string(),
+        name: "默认会话".to_string(),
+        updated_at: None,
+    }
 }

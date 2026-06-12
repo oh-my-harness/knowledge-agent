@@ -7,61 +7,63 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function ok(body: unknown) {
+  return Promise.resolve({ ok: true, status: 200, json: async () => body });
+}
+
+function notFound() {
+  return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
+}
+
 function mockFetch() {
   vi.stubGlobal(
     "fetch",
     vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === "/api/health") {
-        return Promise.resolve({ ok: true, status: 200, json: async () => ({ status: "ok" }) });
+        return ok({ status: "ok" });
       }
       if (url === "/api/vault/index") {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            root: "fixture",
-            notes: [
-              {
-                relative_path: "docs/concepts/agent-harness.md",
-                title: "Agent Harness",
-                note_type: "concept",
-                tags: ["agent", "runtime"],
-                links: [{ target: "LLM Harness", alias: null }]
-              }
-            ]
-          })
+        return ok({
+          root: "fixture",
+          notes: [
+            {
+              relative_path: "docs/concepts/agent-harness.md",
+              title: "Agent Harness",
+              note_type: "concept",
+              tags: ["agent", "runtime"],
+              links: [{ target: "LLM Harness", alias: null }]
+            }
+          ]
         });
       }
       if (url === "/api/maintenance/scan") {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            items: [
-              {
-                priority: "P0",
-                kind: "broken_wikilink",
-                file: "docs/concepts/agent-harness.md",
-                evidence: "Missing target [[LLM Harness]]",
-                requires_confirmation: false
-              }
-            ]
-          })
+        return ok({
+          items: [
+            {
+              priority: "P0",
+              kind: "broken_wikilink",
+              file: "docs/concepts/agent-harness.md",
+              evidence: "Missing target [[LLM Harness]]",
+              requires_confirmation: false
+            }
+          ]
         });
+      }
+      if (url === "/api/ask/sessions") {
+        return ok([{ id: "default", name: "默认会话", updated_at: null }]);
+      }
+      if (url === "/api/ask/sessions/default/messages") {
+        return ok([]);
       }
       if (url === "/api/ask") {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            answer: "已收到你的问题。当前提问通路已经连通，后续会接入知识库检索和 LLM Harness。",
-            sources: [],
-            requires_followup: false
-          })
+        return ok({
+          answer: "我已经收到你的问题。",
+          sources: [],
+          requires_followup: false
         });
       }
-      return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
+      return notFound();
     })
   );
 }
@@ -72,12 +74,18 @@ function mockAskFailure() {
     vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === "/api/health") {
-        return Promise.resolve({ ok: true, status: 200, json: async () => ({ status: "ok" }) });
+        return ok({ status: "ok" });
+      }
+      if (url === "/api/ask/sessions") {
+        return ok([{ id: "default", name: "默认会话", updated_at: null }]);
+      }
+      if (url === "/api/ask/sessions/default/messages") {
+        return ok([]);
       }
       if (url === "/api/ask") {
         return Promise.resolve({ ok: false, status: 500, json: async () => ({}) });
       }
-      return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
+      return notFound();
     })
   );
 }
@@ -111,18 +119,33 @@ describe("App", () => {
     expect(screen.getByText("Missing target [[LLM Harness]]")).toBeInTheDocument();
   });
 
-  it("asks a question and shows the assistant reply", async () => {
+  it("asks a question with Enter and shows the assistant reply", async () => {
     mockFetch();
     render(<App />);
 
     await userEvent.click(screen.getByRole("button", { name: "提问" }));
-    await userEvent.type(screen.getByLabelText("问题"), "什么是 Agent Harness？");
-    await userEvent.click(screen.getByRole("button", { name: "发送" }));
+    await screen.findAllByText("默认会话");
+    await userEvent.type(screen.getByLabelText("问题"), "什么是 Agent Harness？{enter}");
 
     expect(await screen.findByText("什么是 Agent Harness？")).toBeInTheDocument();
-    expect(
-      await screen.findByText("已收到你的问题。当前提问通路已经连通，后续会接入知识库检索和 LLM Harness。")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("我已经收到你的问题。")).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith("/api/ask", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "什么是 Agent Harness？", session_id: "default", mode: "vault" })
+    });
+  });
+
+  it("keeps a newline for Shift+Enter", async () => {
+    mockFetch();
+    render(<App />);
+
+    await userEvent.click(screen.getByRole("button", { name: "提问" }));
+    const input = await screen.findByLabelText("问题");
+    await userEvent.type(input, "第一行{shift>}{enter}{/shift}第二行");
+
+    expect(input).toHaveValue("第一行\n第二行");
+    expect(screen.queryByText("我已经收到你的问题。")).not.toBeInTheDocument();
   });
 
   it("shows an error when asking fails", async () => {
@@ -130,6 +153,7 @@ describe("App", () => {
     render(<App />);
 
     await userEvent.click(screen.getByRole("button", { name: "提问" }));
+    await screen.findAllByText("默认会话");
     await userEvent.type(screen.getByLabelText("问题"), "测试失败");
     await userEvent.click(screen.getByRole("button", { name: "发送" }));
 

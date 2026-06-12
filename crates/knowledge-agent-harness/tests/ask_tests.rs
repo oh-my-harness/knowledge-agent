@@ -18,6 +18,7 @@ async fn fake_runner_returns_configured_answer() {
     let response = runner
         .ask(AskRequest {
             message: "hello".to_string(),
+            session_id: None,
         })
         .await
         .unwrap();
@@ -45,6 +46,7 @@ async fn unavailable_runner_returns_its_error() {
     let result = runner
         .ask(AskRequest {
             message: "hello".to_string(),
+            session_id: None,
         })
         .await;
 
@@ -62,12 +64,14 @@ async fn harness_runner_keeps_context_between_turns() {
     runner
         .ask(AskRequest {
             message: "first question".to_string(),
+            session_id: None,
         })
         .await
         .unwrap();
     let second = runner
         .ask(AskRequest {
             message: "second question".to_string(),
+            session_id: None,
         })
         .await
         .unwrap();
@@ -99,6 +103,7 @@ async fn harness_runner_reopens_jsonl_session() {
     first_runner
         .ask(AskRequest {
             message: "first question".to_string(),
+            session_id: None,
         })
         .await
         .unwrap();
@@ -119,6 +124,7 @@ async fn harness_runner_reopens_jsonl_session() {
     let second = second_runner
         .ask(AskRequest {
             message: "second question".to_string(),
+            session_id: None,
         })
         .await
         .unwrap();
@@ -154,6 +160,7 @@ async fn harness_runner_executes_vault_read_tool() {
     let response = runner
         .ask(AskRequest {
             message: "读取 agent harness 笔记".to_string(),
+            session_id: None,
         })
         .await
         .unwrap();

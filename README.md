@@ -70,6 +70,12 @@ cargo run -p knowledge-agent-cli -- serve . --port 3030
 
 该目录是个人运行状态，已经被 `.gitignore` 忽略，不应提交到远端知识库。
 
+Web 聊天界面支持多个会话：
+
+- 会话列表、创建和切换通过 `/api/ask/sessions` 系列接口管理。
+- 每个会话对应一个 `llm-harness-core` JSONL session。
+- 输入框中按 Enter 直接发送，按 Shift+Enter 换行。
+
 当前 agent 已通过 `llm-harness-core` 的 Tool 机制接入一组只读知识库工具：
 
 - `vault_list_notes`：列出 vault 内的 Markdown 笔记。

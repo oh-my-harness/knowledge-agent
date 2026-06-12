@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { askVault, getHealth, getVaultIndex, runMaintenanceScan } from "./api";
+import {
+  askVault,
+  createAskSession,
+  getAskSessionMessages,
+  getHealth,
+  getVaultIndex,
+  listAskSessions,
+  runMaintenanceScan
+} from "./api";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -47,14 +55,30 @@ describe("api client", () => {
   it("asks the vault through the ask endpoint", async () => {
     mockFetch({ answer: "收到", sources: [], requires_followup: false });
 
-    const response = await askVault("什么是 Agent Harness？");
+    const response = await askVault("什么是 Agent Harness？", "research");
 
     expect(response.answer).toBe("收到");
     expect(fetch).toHaveBeenCalledWith("/api/ask", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message: "什么是 Agent Harness？", mode: "vault" })
+      body: JSON.stringify({ message: "什么是 Agent Harness？", session_id: "research", mode: "vault" })
     });
+  });
+
+  it("manages ask sessions", async () => {
+    mockFetch([{ id: "default", name: "默认会话", updated_at: null }]);
+    await expect(listAskSessions()).resolves.toEqual([{ id: "default", name: "默认会话", updated_at: null }]);
+
+    mockFetch({ id: "research", name: "research", updated_at: null });
+    await expect(createAskSession("research")).resolves.toEqual({
+      id: "research",
+      name: "research",
+      updated_at: null
+    });
+
+    mockFetch([{ role: "user", content: "hello" }]);
+    await expect(getAskSessionMessages("research/session")).resolves.toEqual([{ role: "user", content: "hello" }]);
+    expect(fetch).toHaveBeenLastCalledWith("/api/ask/sessions/research%2Fsession/messages", undefined);
   });
 
   it("throws useful error for failed requests", async () => {

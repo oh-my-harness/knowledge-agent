@@ -212,6 +212,71 @@ button {
   grid-template-rows: auto minmax(220px, 1fr) auto auto;
 }
 
+.chat-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 14px;
+  min-height: 360px;
+}
+
+.session-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  border-right: 1px solid #d8dde6;
+  padding-right: 14px;
+}
+
+.session-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.session-form input {
+  min-width: 0;
+  border: 1px solid #cbd2df;
+  border-radius: 8px;
+  font: inherit;
+  padding: 8px 10px;
+}
+
+.session-list {
+  display: grid;
+  gap: 6px;
+}
+
+.session-item {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #3d4654;
+  cursor: pointer;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.session-item:hover,
+.session-item.active {
+  background: #eef4ff;
+  color: #1f4fbf;
+}
+
+.session-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-item small {
+  color: #667085;
+  font-size: 11px;
+}
+
 .message-list {
   display: grid;
   align-content: start;
@@ -280,5 +345,16 @@ button {
 
   .nav-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chat-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .session-panel {
+    border-right: 0;
+    border-bottom: 1px solid #d8dde6;
+    padding-right: 0;
+    padding-bottom: 12px;
   }
 }

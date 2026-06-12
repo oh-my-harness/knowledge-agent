@@ -1,7 +1,7 @@
 use crate::state::AppState;
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     routing::{get, post},
 };
@@ -17,7 +17,13 @@ struct HealthResponse {
 #[derive(Debug, Deserialize)]
 struct AskRequest {
     message: String,
+    session_id: Option<String>,
     mode: AskMode,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateSessionRequest {
+    name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -44,6 +50,12 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/health", get(health))
         .route("/api/vault/index", get(vault_index))
         .route("/api/maintenance/scan", post(maintenance_scan))
+        .route("/api/ask/sessions", get(list_ask_sessions))
+        .route("/api/ask/sessions", post(create_ask_session))
+        .route(
+            "/api/ask/sessions/{session_id}/messages",
+            get(ask_session_messages),
+        )
         .route("/api/ask", post(ask))
         .with_state(state)
 }
@@ -83,6 +95,7 @@ async fn ask(
                 .ask_runner
                 .ask(harness::AskRequest {
                     message: request.message,
+                    session_id: request.session_id,
                 })
                 .await
                 .map_err(ask_error)?
@@ -95,6 +108,46 @@ async fn ask(
         sources: Vec::new(),
         requires_followup: false,
     }))
+}
+
+async fn list_ask_sessions(State(state): State<AppState>) -> ApiResult<impl Serialize> {
+    state
+        .ask_runner
+        .list_sessions()
+        .await
+        .map(Json)
+        .map_err(ask_error)
+}
+
+async fn create_ask_session(
+    State(state): State<AppState>,
+    Json(request): Json<CreateSessionRequest>,
+) -> ApiResult<impl Serialize> {
+    if request.name.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "session name cannot be empty".to_string(),
+        ));
+    }
+
+    state
+        .ask_runner
+        .create_session(request.name)
+        .await
+        .map(Json)
+        .map_err(ask_error)
+}
+
+async fn ask_session_messages(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> ApiResult<impl Serialize> {
+    state
+        .ask_runner
+        .session_messages(session_id)
+        .await
+        .map(Json)
+        .map_err(ask_error)
 }
 
 fn internal_error(err: anyhow::Error) -> (StatusCode, String) {
