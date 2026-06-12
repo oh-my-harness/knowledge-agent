@@ -1,5 +1,12 @@
+use std::sync::Arc;
+
 use knowledge_agent_harness::{
-    AskError, AskRequest, AskRunner, DeepSeekAskRunner, FakeAskRunner, UnavailableAskRunner,
+    AskError, AskRequest, AskRunner, DeepSeekAskRunner, FakeAskRunner, HarnessAskRunner,
+    UnavailableAskRunner,
+};
+use llm_harness_loop::{
+    LlmClient,
+    test_utils::{MockLlmClient, MockResponse},
 };
 
 #[tokio::test]
@@ -40,4 +47,34 @@ async fn unavailable_runner_returns_its_error() {
         .await;
 
     assert!(matches!(result, Err(AskError::MissingApiKey)));
+}
+
+#[tokio::test]
+async fn harness_runner_keeps_context_between_turns() {
+    let client = Arc::new(MockLlmClient::new(vec![
+        MockResponse::text("first answer"),
+        MockResponse::text("second answer"),
+    ])) as Arc<dyn LlmClient>;
+    let runner = HarnessAskRunner::new_in_memory(client, "test-model".to_string()).await;
+
+    runner
+        .ask(AskRequest {
+            message: "first question".to_string(),
+        })
+        .await
+        .unwrap();
+    let second = runner
+        .ask(AskRequest {
+            message: "second question".to_string(),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(second.answer, "second answer");
+    let messages = runner.context_messages().await.unwrap();
+    assert!(
+        messages.len() >= 4,
+        "expected user/assistant messages from two turns, got {}",
+        messages.len()
+    );
 }

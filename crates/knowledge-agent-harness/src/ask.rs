@@ -2,10 +2,13 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use llm_adapter::deepseek;
-use llm_harness::prelude::{Agent, AgentMessage, AgentOptions, ContentBlock};
+use llm_harness::prelude::{
+    AgentHarness, AgentHarnessOptions, AgentMessage, ContentBlock, ExecutionEnv, UnsupportedEnv,
+};
 use llm_harness_loop::LlmClient;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::sync::Mutex;
 
 const DEFAULT_DEEPSEEK_MODEL: &str = "deepseek-v4-flash";
 const SYSTEM_PROMPT: &str = "你是 Knowledge Agent，一个本地 Obsidian 知识库研究助手。当前版本尚未接入 vault 检索，所以不要声称已经阅读用户的本地知识库。请用中文简洁回答；如果问题需要本地知识库上下文，请说明需要后续接入检索后才能准确回答。";
@@ -77,6 +80,7 @@ impl AskRunner for UnavailableAskRunner {
 pub struct DeepSeekAskRunner {
     api_key: String,
     model: String,
+    harness: Mutex<Option<HarnessAskRunner>>,
 }
 
 impl DeepSeekAskRunner {
@@ -92,24 +96,85 @@ impl DeepSeekAskRunner {
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| DEFAULT_DEEPSEEK_MODEL.to_string());
 
-        Ok(Self { api_key, model })
+        Ok(Self {
+            api_key,
+            model,
+            harness: Mutex::new(None),
+        })
     }
 }
 
 #[async_trait]
 impl AskRunner for DeepSeekAskRunner {
     async fn ask(&self, request: AskRequest) -> Result<AskResponse, AskError> {
-        let client = Arc::new(deepseek::client(self.api_key.clone())) as Arc<dyn LlmClient>;
-        let mut options = AgentOptions::new(self.model.clone());
-        options.system_prompt = Some(SYSTEM_PROMPT.to_string());
-        let agent = Agent::new(client, options);
+        let mut harness = self.harness.lock().await;
+        if harness.is_none() {
+            let client = Arc::new(deepseek::client(self.api_key.clone())) as Arc<dyn LlmClient>;
+            *harness = Some(HarnessAskRunner::new_in_memory(client, self.model.clone()).await);
+        }
 
-        agent
+        harness
+            .as_ref()
+            .expect("harness initialized before ask")
+            .ask(request)
+            .await
+    }
+}
+
+pub struct HarnessAskRunner {
+    harness: Mutex<AgentHarness>,
+}
+
+impl HarnessAskRunner {
+    pub async fn new_in_memory(client: Arc<dyn LlmClient>, model: String) -> Self {
+        Self::new_in_memory_with_env(client, Arc::new(UnsupportedEnv::new()), model).await
+    }
+
+    pub async fn new_in_memory_with_env(
+        client: Arc<dyn LlmClient>,
+        env: Arc<dyn ExecutionEnv>,
+        model: String,
+    ) -> Self {
+        let mut options = AgentHarnessOptions::new(model);
+        options.system_prompt = Some(SYSTEM_PROMPT.to_string());
+        let harness = AgentHarness::new_in_memory(client, env, options).await;
+
+        Self {
+            harness: Mutex::new(harness),
+        }
+    }
+
+    pub async fn context_messages(&self) -> Result<Vec<AgentMessage>, AskError> {
+        let harness = self.harness.lock().await;
+        let context = harness
+            .build_context()
+            .await
+            .map_err(|err| AskError::Harness(err.to_string()))?;
+        Ok(context.messages)
+    }
+}
+
+#[async_trait]
+impl AskRunner for HarnessAskRunner {
+    async fn ask(&self, request: AskRequest) -> Result<AskResponse, AskError> {
+        let harness = self.harness.lock().await;
+        let message_start = harness
+            .build_context()
+            .await
+            .map_err(|err| AskError::Harness(err.to_string()))?
+            .messages
+            .len();
+
+        harness
             .prompt(request.message)
             .await
             .map_err(|err| AskError::Harness(err.to_string()))?;
 
-        let answer = assistant_text(&agent.state().messages);
+        let context = harness
+            .build_context()
+            .await
+            .map_err(|err| AskError::Harness(err.to_string()))?;
+        let answer = assistant_text(&context.messages[message_start..]);
         if answer.trim().is_empty() {
             return Err(AskError::EmptyAnswer);
         }

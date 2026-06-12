@@ -13,3 +13,6 @@ llm_adapter.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+
+[dev-dependencies]
+llm-harness-loop = { workspace = true, features = ["test-utils"] }
