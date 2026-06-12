@@ -453,9 +453,12 @@ button {
 }
 
 .session-panel-restore {
-  align-self: start;
-  justify-self: start;
-  margin-bottom: 2px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(36, 48, 65, 0.12);
 }
 
 .session-form {
@@ -554,6 +557,13 @@ button {
   color: #b42318;
 }
 
+.message-area {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .message-list {
   display: grid;
   align-content: start;
@@ -561,6 +571,10 @@ button {
   min-height: 0;
   overflow-y: auto;
   padding-right: 6px;
+}
+
+.message-area.has-session-restore .message-list {
+  padding-top: 36px;
 }
 
 .message {

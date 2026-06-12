@@ -326,13 +326,7 @@ export function AskPage() {
             </div>
           </aside>
         )}
-        <div
-          className="message-list"
-          aria-label="消息"
-          aria-live="polite"
-          onScroll={handleMessageListScroll}
-          ref={messageListRef}
-        >
+        <div className={`message-area ${isSessionPanelVisible ? "" : "has-session-restore"}`}>
           {!isSessionPanelVisible && (
             <button
               aria-label="显示会话管理"
@@ -344,28 +338,36 @@ export function AskPage() {
               <ChevronsRight aria-hidden="true" size={17} />
             </button>
           )}
-          {isLoadingMessages ? (
-            <p className="muted">加载消息中</p>
-          ) : (
-            messages.map((message, index) => (
-              <article className={`message ${message.role}`} key={`${message.role}-${index}`}>
-                <span>{message.role === "user" ? "你" : "助手"}</span>
-                <MessageBody message={message} />
+          <div
+            className="message-list"
+            aria-label="消息"
+            aria-live="polite"
+            onScroll={handleMessageListScroll}
+            ref={messageListRef}
+          >
+            {isLoadingMessages ? (
+              <p className="muted">加载消息中</p>
+            ) : (
+              messages.map((message, index) => (
+                <article className={`message ${message.role}`} key={`${message.role}-${index}`}>
+                  <span>{message.role === "user" ? "你" : "助手"}</span>
+                  <MessageBody message={message} />
+                </article>
+              ))
+            )}
+            {!isLoadingMessages && isSending && (
+              <article className="message assistant thinking" aria-label="助手正在思考" role="status">
+                <span>助手</span>
+                <div className="thinking-indicator">
+                  <span aria-hidden="true" />
+                  <span aria-hidden="true" />
+                  <span aria-hidden="true" />
+                  <p>{agentActivity ?? "正在思考"}</p>
+                </div>
               </article>
-            ))
-          )}
-          {!isLoadingMessages && isSending && (
-            <article className="message assistant thinking" aria-label="助手正在思考" role="status">
-              <span>助手</span>
-              <div className="thinking-indicator">
-                <span aria-hidden="true" />
-                <span aria-hidden="true" />
-                <span aria-hidden="true" />
-                <p>{agentActivity ?? "正在思考"}</p>
-              </div>
-            </article>
-          )}
-          <div aria-hidden="true" ref={bottomAnchorRef} />
+            )}
+            <div aria-hidden="true" ref={bottomAnchorRef} />
+          </div>
         </div>
       </div>
       {error && <p className="error-text">{error}</p>}
