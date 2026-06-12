@@ -69,3 +69,12 @@ cargo run -p knowledge-agent-cli -- serve . --port 3030
 ```
 
 该目录是个人运行状态，已经被 `.gitignore` 忽略，不应提交到远端知识库。
+
+当前 agent 已通过 `llm-harness-core` 的 Tool 机制接入一组只读知识库工具：
+
+- `vault_list_notes`：列出 vault 内的 Markdown 笔记。
+- `vault_read_note`：读取指定 Markdown 笔记内容。
+- `vault_search_notes`：按纯文本搜索笔记内容。
+- `vault_neighbor_notes`：查看指定笔记的出链和反链。
+
+这些工具只读取当前 vault 内的 `.md` 文件；编辑类工具会在后续按写入安全策略单独接入。

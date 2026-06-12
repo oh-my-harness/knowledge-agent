@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use llm_adapter::deepseek;
 use llm_harness::prelude::{
     AgentHarness, AgentHarnessOptions, AgentMessage, ContentBlock, ExecutionEnv, JsonlSessionRepo,
-    Session, SessionRepo, UnsupportedEnv,
+    Session, SessionRepo, Tool, UnsupportedEnv,
 };
 use llm_harness::session::{CreateSessionOptions, ListSessionOptions};
 use llm_harness_loop::LlmClient;
@@ -15,8 +15,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::Mutex;
 
+use crate::vault_read_tools;
+
 const DEFAULT_DEEPSEEK_MODEL: &str = "deepseek-v4-flash";
-const SYSTEM_PROMPT: &str = "你是 Knowledge Agent，一个本地 Obsidian 知识库研究助手。当前版本尚未接入 vault 检索，所以不要声称已经阅读用户的本地知识库。请用中文简洁回答；如果问题需要本地知识库上下文，请说明需要后续接入检索后才能准确回答。";
+const SYSTEM_PROMPT: &str = "你是 Knowledge Agent，一个本地 Obsidian 知识库研究助手。你可以使用工具读取、搜索和沿链接图浏览当前 vault。回答必须基于已读取到的内容；如果上下文不足，请先使用工具查找。请用中文简洁回答，并在引用本地知识时说明笔记路径。";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AskRequest {
@@ -89,6 +91,7 @@ pub struct DeepSeekAskRunner {
     model: String,
     sessions_root: Option<PathBuf>,
     session_name: String,
+    vault_root: Option<PathBuf>,
     harness: Mutex<Option<HarnessAskRunner>>,
 }
 
@@ -104,17 +107,29 @@ impl DeepSeekAskRunner {
             |name| std::env::var(name).ok(),
             Some(sessions_root.into()),
             "default".to_string(),
+            None,
+        )
+    }
+
+    pub fn from_env_with_vault(vault_root: impl Into<PathBuf>) -> Result<Self, AskError> {
+        let vault_root = vault_root.into();
+        Self::from_env_with_options(
+            |name| std::env::var(name).ok(),
+            Some(vault_root.join(".knowledge-agent").join("sessions")),
+            "default".to_string(),
+            Some(vault_root),
         )
     }
 
     pub fn from_env_with(get_var: impl Fn(&str) -> Option<String>) -> Result<Self, AskError> {
-        Self::from_env_with_options(get_var, None, "default".to_string())
+        Self::from_env_with_options(get_var, None, "default".to_string(), None)
     }
 
     pub fn from_env_with_options(
         get_var: impl Fn(&str) -> Option<String>,
         sessions_root: Option<PathBuf>,
         session_name: String,
+        vault_root: Option<PathBuf>,
     ) -> Result<Self, AskError> {
         let api_key = get_var("DEEPSEEK_API_KEY")
             .filter(|value| !value.trim().is_empty())
@@ -128,6 +143,7 @@ impl DeepSeekAskRunner {
             model,
             sessions_root,
             session_name,
+            vault_root,
             harness: Mutex::new(None),
         })
     }
@@ -139,16 +155,22 @@ impl AskRunner for DeepSeekAskRunner {
         let mut harness = self.harness.lock().await;
         if harness.is_none() {
             let client = Arc::new(deepseek::client(self.api_key.clone())) as Arc<dyn LlmClient>;
+            let tools = self
+                .vault_root
+                .as_ref()
+                .map(|vault_root| vault_read_tools(vault_root.clone()))
+                .unwrap_or_default();
             *harness = Some(if let Some(sessions_root) = &self.sessions_root {
                 HarnessAskRunner::new_jsonl(
                     client,
                     self.model.clone(),
                     sessions_root,
                     self.session_name.clone(),
+                    tools,
                 )
                 .await?
             } else {
-                HarnessAskRunner::new_in_memory(client, self.model.clone()).await
+                HarnessAskRunner::new_in_memory_with_tools(client, self.model.clone(), tools).await
             });
         }
 
@@ -166,7 +188,15 @@ pub struct HarnessAskRunner {
 
 impl HarnessAskRunner {
     pub async fn new_in_memory(client: Arc<dyn LlmClient>, model: String) -> Self {
-        Self::new_in_memory_with_env(client, Arc::new(UnsupportedEnv::new()), model).await
+        Self::new_in_memory_with_tools(client, model, Vec::new()).await
+    }
+
+    pub async fn new_in_memory_with_tools(
+        client: Arc<dyn LlmClient>,
+        model: String,
+        tools: Vec<Arc<dyn Tool>>,
+    ) -> Self {
+        Self::new_in_memory_with_env(client, Arc::new(UnsupportedEnv::new()), model, tools).await
     }
 
     pub async fn new_jsonl(
@@ -174,6 +204,7 @@ impl HarnessAskRunner {
         model: String,
         sessions_root: impl AsRef<Path>,
         session_name: String,
+        tools: Vec<Arc<dyn Tool>>,
     ) -> Result<Self, AskError> {
         Self::new_jsonl_with_env(
             client,
@@ -181,6 +212,7 @@ impl HarnessAskRunner {
             model,
             sessions_root,
             session_name,
+            tools,
         )
         .await
     }
@@ -189,9 +221,11 @@ impl HarnessAskRunner {
         client: Arc<dyn LlmClient>,
         env: Arc<dyn ExecutionEnv>,
         model: String,
+        tools: Vec<Arc<dyn Tool>>,
     ) -> Self {
         let mut options = AgentHarnessOptions::new(model);
         options.system_prompt = Some(SYSTEM_PROMPT.to_string());
+        options.tools = tools;
         let harness = AgentHarness::new_in_memory(client, env, options).await;
 
         Self {
@@ -205,6 +239,7 @@ impl HarnessAskRunner {
         model: String,
         sessions_root: impl AsRef<Path>,
         session_name: String,
+        tools: Vec<Arc<dyn Tool>>,
     ) -> Result<Self, AskError> {
         tokio::fs::create_dir_all(sessions_root.as_ref())
             .await
@@ -237,6 +272,7 @@ impl HarnessAskRunner {
 
         let mut options = AgentHarnessOptions::new(model);
         options.system_prompt = Some(SYSTEM_PROMPT.to_string());
+        options.tools = tools;
         let harness = AgentHarness::with_session(client, env, Session::new(storage), options);
 
         Ok(Self {

@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use knowledge_agent_harness::{
     AskError, AskRequest, AskRunner, DeepSeekAskRunner, FakeAskRunner, HarnessAskRunner,
-    UnavailableAskRunner,
+    UnavailableAskRunner, vault_read_tools,
 };
+use llm_harness::prelude::{AgentMessage, ContentBlock};
 use llm_harness_loop::{
     LlmClient,
     test_utils::{MockLlmClient, MockResponse},
@@ -90,6 +91,7 @@ async fn harness_runner_reopens_jsonl_session() {
         "test-model".to_string(),
         tmp.path(),
         "default".to_string(),
+        Vec::new(),
     )
     .await
     .unwrap();
@@ -110,6 +112,7 @@ async fn harness_runner_reopens_jsonl_session() {
         "test-model".to_string(),
         tmp.path(),
         "default".to_string(),
+        Vec::new(),
     )
     .await
     .unwrap();
@@ -126,5 +129,51 @@ async fn harness_runner_reopens_jsonl_session() {
         messages.len() >= 4,
         "expected persisted messages from two turns, got {}",
         messages.len()
+    );
+}
+
+#[tokio::test]
+async fn harness_runner_executes_vault_read_tool() {
+    let vault_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../knowledge-agent-core/tests/fixtures/basic-vault");
+    let client = Arc::new(MockLlmClient::new(vec![
+        MockResponse::tool_use(
+            "tool-1",
+            "vault_read_note",
+            r#"{"path":"docs/concepts/agent-harness.md"}"#,
+        ),
+        MockResponse::text("我已经读取了 agent harness 笔记。"),
+    ])) as Arc<dyn LlmClient>;
+    let runner = HarnessAskRunner::new_in_memory_with_tools(
+        client,
+        "test-model".to_string(),
+        vault_read_tools(vault_root),
+    )
+    .await;
+
+    let response = runner
+        .ask(AskRequest {
+            message: "读取 agent harness 笔记".to_string(),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(response.answer, "我已经读取了 agent harness 笔记。");
+    let messages = runner.context_messages().await.unwrap();
+    let tool_text = messages.iter().find_map(|message| {
+        let AgentMessage::ToolResult(result) = message else {
+            return None;
+        };
+        result.content.iter().find_map(|block| {
+            if let ContentBlock::Text { text } = block {
+                Some(text)
+            } else {
+                None
+            }
+        })
+    });
+    assert!(
+        tool_text.is_some_and(|text| text.contains("agent-harness.md")),
+        "expected vault_read_note tool result in context"
     );
 }

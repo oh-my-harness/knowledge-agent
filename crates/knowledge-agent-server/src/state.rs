@@ -10,9 +10,8 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(vault_root: PathBuf) -> Self {
-        let sessions_root = vault_root.join(".knowledge-agent").join("sessions");
         let ask_runner: Arc<dyn AskRunner> =
-            match DeepSeekAskRunner::from_env_with_sessions_root(sessions_root) {
+            match DeepSeekAskRunner::from_env_with_vault(&vault_root) {
                 Ok(runner) => Arc::new(runner),
                 Err(err) => Arc::new(UnavailableAskRunner::new(err)),
             };

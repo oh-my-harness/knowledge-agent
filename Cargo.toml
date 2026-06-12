@@ -17,6 +17,7 @@ anyhow = "1"
 async-trait = "0.1"
 axum = "0.8"
 clap = { version = "4", features = ["derive"] }
+futures = "0.3"
 gray_matter = "0.2"
 llm-harness = { git = "https://github.com/oh-my-harness/llm-harness-core.git", package = "llm-harness" }
 llm-harness-loop = { git = "https://github.com/oh-my-harness/llm-harness-core.git", package = "llm-harness-loop" }

@@ -7,10 +7,13 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+futures.workspace = true
+knowledge-agent-core = { path = "../knowledge-agent-core" }
 llm-harness.workspace = true
 llm-harness-loop.workspace = true
 llm_adapter.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 
