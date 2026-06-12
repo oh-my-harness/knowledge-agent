@@ -52,9 +52,6 @@ function mockFetch(answer = "我已经收到你的问题。") {
           ]
         });
       }
-      if (url === "/api/vault/pdfs") {
-        return ok([{ path: "assets/papers/source.pdf", bytes: 42 }]);
-      }
       if (url === "/api/maintenance/scan") {
         return ok({
           items: [
@@ -265,29 +262,6 @@ describe("App", () => {
     expect(screen.getByText("Missing target [[LLM Harness]]")).toBeInTheDocument();
   });
 
-  it("ingests a URL through the agent", async () => {
-    mockFetch("已生成资料卡");
-    render(<App />);
-
-    await userEvent.click(screen.getByRole("button", { name: "资料摄入" }));
-    expect(await screen.findByRole("heading", { name: "资料摄入" })).toBeInTheDocument();
-
-    await userEvent.type(screen.getByLabelText("网页 URL"), "https://example.com/article");
-    await userEvent.click(screen.getByRole("button", { name: "开始摄入" }));
-
-    expect(await screen.findByText("已生成资料卡")).toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledWith("/api/ask", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: expect.stringContaining("web_fetch_page")
-    });
-    expect(fetch).toHaveBeenCalledWith("/api/ask", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: expect.stringContaining("https://example.com/article")
-    });
-  });
-
   it("shows and applies confirmation queue items", async () => {
     mockConfirmationFetch();
     render(<App />);
@@ -350,6 +324,28 @@ describe("App", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ message: "什么是 Agent Harness？", session_id: "default", mode: "vault" })
+    });
+  });
+
+  it("can ask the agent to ingest a URL from chat", async () => {
+    mockFetch("已生成资料卡");
+    render(<App />);
+
+    await screen.findAllByText("默认会话");
+    await userEvent.type(
+      screen.getByLabelText("问题"),
+      "请阅读 https://example.com/article 并生成知识库资料卡{enter}"
+    );
+
+    expect(await screen.findByText("已生成资料卡")).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith("/api/ask", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        message: "请阅读 https://example.com/article 并生成知识库资料卡",
+        session_id: "default",
+        mode: "vault"
+      })
     });
   });
 

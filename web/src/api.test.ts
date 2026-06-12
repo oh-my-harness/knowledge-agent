@@ -8,7 +8,6 @@ import {
   getAskSessionMessages,
   getLocalSettings,
   getVaultIndex,
-  listPdfAssets,
   listConfirmations,
   listAskSessions,
   renameAskSession,
@@ -54,12 +53,6 @@ describe("api client", () => {
   it("loads vault index", async () => {
     mockFetch({ root: "vault", notes: [] });
     await expect(getVaultIndex()).resolves.toEqual({ root: "vault", notes: [] });
-  });
-
-  it("loads PDF assets", async () => {
-    mockFetch([{ path: "assets/papers/source.pdf", bytes: 42 }]);
-    await expect(listPdfAssets()).resolves.toEqual([{ path: "assets/papers/source.pdf", bytes: 42 }]);
-    expect(fetch).toHaveBeenCalledWith("/api/vault/pdfs", undefined);
   });
 
   it("loads and saves local settings", async () => {

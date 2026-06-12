@@ -1,15 +1,13 @@
-import { FileInput, MessageSquareText, ScanSearch, Settings } from "lucide-react";
+import { MessageSquareText, ScanSearch, Settings } from "lucide-react";
 import { useState } from "react";
 import { AskPage } from "./pages/AskPage";
-import { IngestPage } from "./pages/IngestPage";
 import { MaintenancePage } from "./pages/MaintenancePage";
 import { SettingsPage } from "./pages/SettingsPage";
 
-type Page = "ask" | "ingest" | "maintenance" | "settings";
+type Page = "ask" | "maintenance" | "settings";
 
 const navItems: Array<{ id: Page; label: string; icon: typeof MessageSquareText }> = [
   { id: "ask", label: "提问", icon: MessageSquareText },
-  { id: "ingest", label: "资料摄入", icon: FileInput },
   { id: "maintenance", label: "维护扫描", icon: ScanSearch },
   { id: "settings", label: "设置", icon: Settings }
 ];
@@ -46,7 +44,6 @@ export function App() {
       </aside>
       <main className="content">
         {page === "ask" && <AskPage />}
-        {page === "ingest" && <IngestPage />}
         {page === "maintenance" && <MaintenancePage />}
         {page === "settings" && <SettingsPage />}
       </main>

@@ -16,11 +16,6 @@ export interface VaultScan {
   notes: ScannedNote[];
 }
 
-export interface PdfAsset {
-  path: string;
-  bytes: number;
-}
-
 export interface MaintenanceItem {
   priority: string;
   kind: string;

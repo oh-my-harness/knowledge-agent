@@ -6,7 +6,6 @@ import type {
   ConfirmationQueue,
   LocalSettings,
   MaintenanceInbox,
-  PdfAsset,
   VaultScan
 } from "./types";
 
@@ -20,10 +19,6 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getVaultIndex(): Promise<VaultScan> {
   return requestJson<VaultScan>("/api/vault/index");
-}
-
-export function listPdfAssets(): Promise<PdfAsset[]> {
-  return requestJson<PdfAsset[]>("/api/vault/pdfs");
 }
 
 export function getLocalSettings(): Promise<LocalSettings> {
