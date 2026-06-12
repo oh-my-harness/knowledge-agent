@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, UIEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
@@ -15,6 +15,9 @@ export function AskPage() {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [agentActivity, setAgentActivity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const messageListRef = useRef<HTMLDivElement | null>(null);
+  const sessionScrollPositions = useRef<Record<string, number>>({});
+  const pendingScrollSession = useRef<string | null>(null);
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId),
     [activeSessionId, sessions]
@@ -49,6 +52,7 @@ export function AskPage() {
 
   useEffect(() => {
     let isCurrent = true;
+    pendingScrollSession.current = activeSessionId;
     setIsLoadingMessages(true);
     getAskSessionMessages(activeSessionId)
       .then((loadedMessages) => {
@@ -73,6 +77,21 @@ export function AskPage() {
       isCurrent = false;
     };
   }, [activeSessionId]);
+
+  useEffect(() => {
+    if (isLoadingMessages || pendingScrollSession.current !== activeSessionId) {
+      return;
+    }
+
+    const messageList = messageListRef.current;
+    if (!messageList) {
+      return;
+    }
+
+    const savedPosition = sessionScrollPositions.current[activeSessionId];
+    messageList.scrollTop = savedPosition ?? messageList.scrollHeight;
+    pendingScrollSession.current = null;
+  }, [activeSessionId, isLoadingMessages, messages]);
 
   useEffect(() => {
     if (typeof EventSource === "undefined") {
@@ -157,6 +176,10 @@ export function AskPage() {
     void sendMessage();
   }
 
+  function handleMessageListScroll(event: UIEvent<HTMLDivElement>) {
+    sessionScrollPositions.current[activeSessionId] = event.currentTarget.scrollTop;
+  }
+
   return (
     <section className="page ask-page">
       <header className="page-header">
@@ -193,7 +216,13 @@ export function AskPage() {
             ))}
           </div>
         </aside>
-        <div className="message-list" aria-live="polite">
+        <div
+          className="message-list"
+          aria-label="消息"
+          aria-live="polite"
+          onScroll={handleMessageListScroll}
+          ref={messageListRef}
+        >
           {isLoadingMessages ? (
             <p className="muted">加载消息中</p>
           ) : (

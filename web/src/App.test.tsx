@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -133,6 +133,34 @@ function mockDelayedAsk(answer = "我已经想好了。") {
   return { resolveAsk };
 }
 
+function mockSessionScrollFetch() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/ask/sessions") {
+        return ok([
+          { id: "default", name: "默认会话", updated_at: null },
+          { id: "research", name: "研究会话", updated_at: null }
+        ]);
+      }
+      if (url === "/api/ask/sessions/default/messages") {
+        return ok([
+          { role: "user", content: "默认问题" },
+          { role: "assistant", content: "默认回答" }
+        ]);
+      }
+      if (url === "/api/ask/sessions/research/messages") {
+        return ok([
+          { role: "user", content: "研究问题" },
+          { role: "assistant", content: "研究回答" }
+        ]);
+      }
+      return notFound();
+    })
+  );
+}
+
 describe("App", () => {
   it("starts on the ask page without service status navigation", async () => {
     mockFetch();
@@ -220,6 +248,32 @@ describe("App", () => {
 
     expect(await screen.findByText("我已经想好了。")).toBeInTheDocument();
     expect(screen.queryByRole("status", { name: "助手正在思考" })).not.toBeInTheDocument();
+  });
+
+  it("scrolls new sessions to latest and restores previous session positions", async () => {
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(1000);
+    mockSessionScrollFetch();
+    render(<App />);
+
+    await screen.findByText("默认回答");
+    const messageList = screen.getByLabelText("消息");
+    expect(messageList.scrollTop).toBe(1000);
+
+    messageList.scrollTop = 120;
+    fireEvent.scroll(messageList);
+
+    await userEvent.click(screen.getByRole("button", { name: "研究会话" }));
+    await screen.findByText("研究回答");
+    expect(messageList.scrollTop).toBe(1000);
+
+    messageList.scrollTop = 240;
+    fireEvent.scroll(messageList);
+
+    await userEvent.click(screen.getByRole("button", { name: "默认会话" }));
+    await screen.findByText("默认回答");
+    expect(messageList.scrollTop).toBe(120);
+
+    scrollHeight.mockRestore();
   });
 
   it("renders assistant markdown", async () => {
