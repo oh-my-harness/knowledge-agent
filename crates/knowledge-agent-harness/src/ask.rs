@@ -10,7 +10,7 @@ use llm_harness::prelude::{
     AgentHarness, AgentHarnessEvent, AgentHarnessOptions, AgentMessage, ContentBlock, ExecutionEnv,
     JsonlSessionRepo, Session, SessionRepo, Tool, UnsupportedEnv,
 };
-use llm_harness::session::{CreateSessionOptions, ListSessionOptions};
+use llm_harness::session::{CreateSessionOptions, ListSessionOptions, SessionMetadata};
 use llm_harness_loop::LlmClient;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -70,6 +70,12 @@ pub trait AskRunner: Send + Sync {
     async fn ask(&self, request: AskRequest) -> Result<AskResponse, AskError>;
     async fn list_sessions(&self) -> Result<Vec<ChatSession>, AskError>;
     async fn create_session(&self, name: String) -> Result<ChatSession, AskError>;
+    async fn rename_session(
+        &self,
+        session_id: String,
+        name: String,
+    ) -> Result<ChatSession, AskError>;
+    async fn delete_session(&self, session_id: String) -> Result<(), AskError>;
     async fn session_messages(&self, session_id: String) -> Result<Vec<ChatMessage>, AskError>;
     async fn subscribe_events(
         &self,
@@ -110,6 +116,22 @@ impl AskRunner for FakeAskRunner {
         })
     }
 
+    async fn rename_session(
+        &self,
+        _session_id: String,
+        name: String,
+    ) -> Result<ChatSession, AskError> {
+        Ok(ChatSession {
+            id: normalize_session_id(&name),
+            name,
+            updated_at: None,
+        })
+    }
+
+    async fn delete_session(&self, _session_id: String) -> Result<(), AskError> {
+        Ok(())
+    }
+
     async fn session_messages(&self, _session_id: String) -> Result<Vec<ChatMessage>, AskError> {
         Ok(Vec::new())
     }
@@ -148,6 +170,22 @@ impl AskRunner for UnavailableAskRunner {
             name,
             updated_at: None,
         })
+    }
+
+    async fn rename_session(
+        &self,
+        _session_id: String,
+        name: String,
+    ) -> Result<ChatSession, AskError> {
+        Ok(ChatSession {
+            id: normalize_session_id(&name),
+            name,
+            updated_at: None,
+        })
+    }
+
+    async fn delete_session(&self, _session_id: String) -> Result<(), AskError> {
+        Ok(())
     }
 
     async fn session_messages(&self, _session_id: String) -> Result<Vec<ChatMessage>, AskError> {
@@ -261,6 +299,22 @@ impl DeepSeekAskRunner {
         harnesses.insert(session_id.to_string(), harness.clone());
         Ok(harness)
     }
+
+    async fn find_session_metadata_by_name(
+        &self,
+        repo: &JsonlSessionRepo,
+        name: &str,
+    ) -> Result<Option<SessionMetadata>, AskError> {
+        Ok(repo
+            .list(ListSessionOptions {
+                name_contains: Some(name.to_string()),
+                ..ListSessionOptions::default()
+            })
+            .await
+            .map_err(|err| AskError::Session(err.to_string()))?
+            .into_iter()
+            .find(|metadata| metadata.name.as_deref() == Some(name)))
+    }
 }
 
 #[async_trait]
@@ -321,6 +375,81 @@ impl AskRunner for DeepSeekAskRunner {
             name: session_id,
             updated_at: None,
         })
+    }
+
+    async fn rename_session(
+        &self,
+        session_id: String,
+        name: String,
+    ) -> Result<ChatSession, AskError> {
+        let old_session_id = normalize_session_id(&session_id);
+        let new_session_id = normalize_session_id(&name);
+        if old_session_id.is_empty() || new_session_id.is_empty() {
+            return Err(AskError::Session(
+                "session name cannot be empty".to_string(),
+            ));
+        }
+
+        if let Some(sessions_root) = &self.sessions_root {
+            tokio::fs::create_dir_all(sessions_root)
+                .await
+                .map_err(|err| AskError::Session(err.to_string()))?;
+            let repo = JsonlSessionRepo::new(sessions_root);
+            let metadata = self
+                .find_session_metadata_by_name(&repo, &old_session_id)
+                .await?
+                .ok_or_else(|| AskError::Session(format!("session not found: {old_session_id}")))?;
+            let storage = repo
+                .open(&metadata.id)
+                .await
+                .map_err(|err| AskError::Session(err.to_string()))?;
+            storage
+                .update_metadata_name(Some(new_session_id.clone()))
+                .await
+                .map_err(|err| AskError::Session(err.to_string()))?;
+        }
+
+        let moved_harness = {
+            let mut harnesses = self.harnesses.lock().await;
+            let moved = harnesses.remove(&old_session_id);
+            if let Some(harness) = &moved {
+                harnesses.insert(new_session_id.clone(), harness.clone());
+            }
+            moved
+        };
+        if let Some(harness) = moved_harness {
+            harness.rename_session(new_session_id.clone()).await?;
+        }
+
+        Ok(ChatSession {
+            id: new_session_id.clone(),
+            name: new_session_id,
+            updated_at: None,
+        })
+    }
+
+    async fn delete_session(&self, session_id: String) -> Result<(), AskError> {
+        let session_id = normalize_session_id(&session_id);
+        if session_id.is_empty() {
+            return Err(AskError::Session(
+                "session name cannot be empty".to_string(),
+            ));
+        }
+
+        if let Some(sessions_root) = &self.sessions_root {
+            let repo = JsonlSessionRepo::new(sessions_root);
+            if let Some(metadata) = self
+                .find_session_metadata_by_name(&repo, &session_id)
+                .await?
+            {
+                repo.delete(&metadata.id)
+                    .await
+                    .map_err(|err| AskError::Session(err.to_string()))?;
+            }
+        }
+
+        self.harnesses.lock().await.remove(&session_id);
+        Ok(())
     }
 
     async fn session_messages(&self, session_id: String) -> Result<Vec<ChatMessage>, AskError> {
@@ -464,6 +593,14 @@ impl HarnessAskRunner {
         let harness = self.harness.lock().await;
         Ok(harness.subscribe())
     }
+
+    pub async fn rename_session(&self, name: String) -> Result<(), AskError> {
+        let harness = self.harness.lock().await;
+        harness
+            .set_session_name(name)
+            .await
+            .map_err(|err| AskError::Harness(err.to_string()))
+    }
 }
 
 #[async_trait]
@@ -504,6 +641,29 @@ impl AskRunner for HarnessAskRunner {
             name,
             updated_at: None,
         })
+    }
+
+    async fn rename_session(
+        &self,
+        _session_id: String,
+        name: String,
+    ) -> Result<ChatSession, AskError> {
+        let session_id = normalize_session_id(&name);
+        if session_id.is_empty() {
+            return Err(AskError::Session(
+                "session name cannot be empty".to_string(),
+            ));
+        }
+        self.rename_session(session_id.clone()).await?;
+        Ok(ChatSession {
+            id: session_id.clone(),
+            name: session_id,
+            updated_at: None,
+        })
+    }
+
+    async fn delete_session(&self, _session_id: String) -> Result<(), AskError> {
+        Ok(())
     }
 
     async fn session_messages(&self, _session_id: String) -> Result<Vec<ChatMessage>, AskError> {

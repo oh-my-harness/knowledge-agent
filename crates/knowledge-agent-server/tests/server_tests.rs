@@ -256,6 +256,44 @@ async fn ask_sessions_can_be_listed_created_and_loaded() {
 }
 
 #[tokio::test]
+async fn ask_sessions_can_be_renamed_and_deleted() {
+    let vault = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../knowledge-agent-core/tests/fixtures/basic-vault");
+    let app = build_router(AppState::new_with_fake_ask_runner(vault, "fake llm answer"));
+
+    let rename_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/ask/sessions/research")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"name":"renamed"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rename_response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(rename_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["id"], "renamed");
+
+    let delete_response = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/ask/sessions/renamed")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
 async fn ask_rejects_empty_message() {
     let vault = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../knowledge-agent-core/tests/fixtures/basic-vault");

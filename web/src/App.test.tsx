@@ -164,6 +164,37 @@ function mockSessionScrollFetch() {
   );
 }
 
+function mockSessionActionFetch() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/ask/sessions") {
+        return ok([
+          { id: "default", name: "默认会话", updated_at: null },
+          { id: "research", name: "研究会话", updated_at: null }
+        ]);
+      }
+      if (url === "/api/ask/sessions/default/messages") {
+        return ok([]);
+      }
+      if (url === "/api/ask/sessions/research/messages") {
+        return ok([]);
+      }
+      if (url === "/api/ask/sessions/research" && init?.method === "PATCH") {
+        return ok({ id: "renamed", name: "renamed", updated_at: null });
+      }
+      if (url === "/api/ask/sessions/renamed/messages") {
+        return ok([]);
+      }
+      if (url === "/api/ask/sessions/renamed" && init?.method === "DELETE") {
+        return Promise.resolve({ ok: true, status: 204, json: async () => ({}) });
+      }
+      return notFound();
+    })
+  );
+}
+
 function mockConfirmationFetch() {
   vi.stubGlobal(
     "fetch",
@@ -308,6 +339,28 @@ describe("App", () => {
 
     expect(await screen.findByText("我已经想好了。")).toBeInTheDocument();
     expect(screen.queryByRole("status", { name: "助手正在思考" })).not.toBeInTheDocument();
+  });
+
+  it("renames and deletes sessions from the session list", async () => {
+    mockSessionActionFetch();
+    vi.spyOn(window, "prompt").mockReturnValue("renamed");
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<App />);
+
+    await screen.findByRole("button", { name: "研究会话" });
+    await userEvent.click(screen.getByRole("button", { name: "重命名会话 研究会话" }));
+
+    expect(await screen.findByRole("button", { name: "renamed" })).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith("/api/ask/sessions/research", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "renamed" })
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "删除会话 renamed" }));
+
+    expect(screen.queryByRole("button", { name: "renamed" })).not.toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith("/api/ask/sessions/renamed", { method: "DELETE" });
   });
 
   it("scrolls sessions to the latest message when opened", async () => {

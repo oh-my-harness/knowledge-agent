@@ -4,7 +4,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::sse::{Event, KeepAlive, Sse},
-    routing::{get, post},
+    routing::{delete, get, patch, post},
 };
 use futures::{Stream, stream};
 use knowledge_agent_core::{
@@ -39,6 +39,11 @@ struct AskEventsQuery {
 
 #[derive(Debug, Deserialize)]
 struct CreateSessionRequest {
+    name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RenameSessionRequest {
     name: String,
 }
 
@@ -86,6 +91,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/settings/local", post(save_settings))
         .route("/api/ask/sessions", get(list_ask_sessions))
         .route("/api/ask/sessions", post(create_ask_session))
+        .route("/api/ask/sessions/{session_id}", patch(rename_ask_session))
+        .route("/api/ask/sessions/{session_id}", delete(delete_ask_session))
         .route(
             "/api/ask/sessions/{session_id}/messages",
             get(ask_session_messages),
@@ -208,6 +215,38 @@ async fn create_ask_session(
         .create_session(request.name)
         .await
         .map(Json)
+        .map_err(ask_error)
+}
+
+async fn rename_ask_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<RenameSessionRequest>,
+) -> ApiResult<impl Serialize> {
+    if request.name.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "session name cannot be empty".to_string(),
+        ));
+    }
+
+    state
+        .ask_runner
+        .rename_session(session_id, request.name)
+        .await
+        .map(Json)
+        .map_err(ask_error)
+}
+
+async fn delete_ask_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    state
+        .ask_runner
+        .delete_session(session_id)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
         .map_err(ask_error)
 }
 

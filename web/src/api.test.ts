@@ -4,11 +4,13 @@ import {
   askVault,
   applyConfirmation,
   createAskSession,
+  deleteAskSession,
   getAskSessionMessages,
   getLocalSettings,
   getVaultIndex,
   listConfirmations,
   listAskSessions,
+  renameAskSession,
   rejectConfirmation,
   runMaintenanceScan,
   saveLocalSettings
@@ -134,6 +136,29 @@ describe("api client", () => {
     mockFetch([{ role: "user", content: "hello" }]);
     await expect(getAskSessionMessages("research/session")).resolves.toEqual([{ role: "user", content: "hello" }]);
     expect(fetch).toHaveBeenLastCalledWith("/api/ask/sessions/research%2Fsession/messages", undefined);
+  });
+
+  it("renames and deletes ask sessions", async () => {
+    mockFetch({ id: "renamed", name: "renamed", updated_at: null });
+    await expect(renameAskSession("research/session", "renamed")).resolves.toEqual({
+      id: "renamed",
+      name: "renamed",
+      updated_at: null
+    });
+    expect(fetch).toHaveBeenCalledWith("/api/ask/sessions/research%2Fsession", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "renamed" })
+    });
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      text: async () => "",
+      json: async () => ({})
+    } as Response);
+    await expect(deleteAskSession("research/session")).resolves.toBeUndefined();
+    expect(fetch).toHaveBeenLastCalledWith("/api/ask/sessions/research%2Fsession", { method: "DELETE" });
   });
 
   it("throws useful error for failed requests", async () => {

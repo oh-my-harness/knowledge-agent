@@ -414,15 +414,16 @@ button {
 
 .session-item {
   display: grid;
-  gap: 3px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
   width: 100%;
   min-height: 44px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: #3d4654;
-  cursor: pointer;
-  padding: 8px 10px;
+  padding: 4px;
   text-align: left;
 }
 
@@ -432,15 +433,60 @@ button {
   color: #1f4fbf;
 }
 
-.session-item span {
+.session-select {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 4px 6px;
+  text-align: left;
+}
+
+.session-select span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.session-item small {
+.session-select small {
   color: #667085;
   font-size: 11px;
+}
+
+.session-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0.55;
+}
+
+.session-item:hover .session-actions,
+.session-item.active .session-actions {
+  opacity: 1;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #667085;
+  cursor: pointer;
+  padding: 0;
+}
+
+.icon-button:hover {
+  background: #ffffff;
+  color: #1f4fbf;
+}
+
+.icon-button.danger:hover {
+  color: #b42318;
 }
 
 .message-list {

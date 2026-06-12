@@ -1,8 +1,17 @@
 import { FormEvent, KeyboardEvent, UIEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
-import { askEventsUrl, askVault, createAskSession, getAskSessionMessages, listAskSessions } from "../api";
+import {
+  askEventsUrl,
+  askVault,
+  createAskSession,
+  deleteAskSession,
+  getAskSessionMessages,
+  listAskSessions,
+  renameAskSession
+} from "../api";
 import type { AskActivityEvent, ChatMessage, ChatSession } from "../types";
 
 export function AskPage() {
@@ -190,6 +199,42 @@ export function AskPage() {
     }
   }
 
+  async function handleRenameSession(session: ChatSession) {
+    const name = window.prompt("新的会话名称", session.name)?.trim();
+    if (!name || name === session.name) {
+      return;
+    }
+
+    try {
+      const renamed = await renameAskSession(session.id, name);
+      setSessions((current) => current.map((item) => (item.id === session.id ? renamed : item)));
+      if (activeSessionId === session.id) {
+        setActiveSessionId(renamed.id);
+      }
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "重命名会话失败");
+    }
+  }
+
+  async function handleDeleteSession(session: ChatSession) {
+    if (!window.confirm(`删除会话“${session.name}”？`)) {
+      return;
+    }
+
+    try {
+      await deleteAskSession(session.id);
+      const nextSessions = sessions.filter((item) => item.id !== session.id);
+      setSessions(nextSessions);
+      if (activeSessionId === session.id) {
+        setActiveSessionId(nextSessions[0]?.id ?? "default");
+      }
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除会话失败");
+    }
+  }
+
   function handleInputKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
       return;
@@ -234,15 +279,35 @@ export function AskPage() {
           </form>
           <div className="session-list">
             {sessions.map((session) => (
-              <button
+              <div
                 className={`session-item ${session.id === activeSessionId ? "active" : ""}`}
                 key={session.id}
-                onClick={() => setActiveSessionId(session.id)}
-                type="button"
               >
-                <span>{session.name}</span>
-                {session.updated_at && <small>{new Date(session.updated_at).toLocaleString()}</small>}
-              </button>
+                <button className="session-select" onClick={() => setActiveSessionId(session.id)} type="button">
+                  <span>{session.name}</span>
+                  {session.updated_at && <small>{new Date(session.updated_at).toLocaleString()}</small>}
+                </button>
+                <div className="session-actions">
+                  <button
+                    aria-label={`重命名会话 ${session.name}`}
+                    className="icon-button"
+                    onClick={() => void handleRenameSession(session)}
+                    title="重命名"
+                    type="button"
+                  >
+                    <Pencil aria-hidden="true" size={15} />
+                  </button>
+                  <button
+                    aria-label={`删除会话 ${session.name}`}
+                    className="icon-button danger"
+                    onClick={() => void handleDeleteSession(session)}
+                    title="删除"
+                    type="button"
+                  >
+                    <Trash2 aria-hidden="true" size={15} />
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </aside>

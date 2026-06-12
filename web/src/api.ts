@@ -61,6 +61,21 @@ export function createAskSession(name: string): Promise<ChatSession> {
   });
 }
 
+export function renameAskSession(sessionId: string, name: string): Promise<ChatSession> {
+  return requestJson<ChatSession>(`/api/ask/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name })
+  });
+}
+
+export async function deleteAskSession(sessionId: string): Promise<void> {
+  const response = await fetch(`/api/ask/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(`DELETE /api/ask/sessions/${encodeURIComponent(sessionId)} failed with ${response.status}`);
+  }
+}
+
 export function getAskSessionMessages(sessionId: string): Promise<ChatMessage[]> {
   return requestJson<ChatMessage[]>(`/api/ask/sessions/${encodeURIComponent(sessionId)}/messages`);
 }
