@@ -35,6 +35,7 @@ try {
     Write-Host "Archive written to $archivePath"
     Write-Host "Run: .\knowledge-agent.exe serve <obsidian-vault>"
     Write-Host "Verify: .\scripts\verify-package.ps1"
+    Write-Host "Install for current user: .\scripts\install-user.ps1"
 }
 finally {
     Pop-Location

@@ -113,6 +113,41 @@ cd dist\knowledge-agent
 
 该脚本会创建临时 vault、执行 `init`、启动打包后的服务，并检查 Web 首页和 `/api/health`。
 
+## 用户级安装
+
+如果希望像 `git` 一样在任意目录直接运行 `knowledge-agent`，可以先打包，再安装到当前 Windows 用户：
+
+```powershell
+.\scripts\package.ps1
+.\scripts\install-user.ps1
+```
+
+默认安装位置：
+
+```text
+%LOCALAPPDATA%\KnowledgeAgent
+```
+
+安装脚本会把该目录加入当前用户的 `PATH`，不需要管理员权限。安装完成后打开一个新的 PowerShell，然后运行：
+
+```powershell
+knowledge-agent --help
+knowledge-agent init <你的 Obsidian vault 路径>
+knowledge-agent serve <你的 Obsidian vault 路径>
+```
+
+如果只想测试复制安装目录，不修改 `PATH`：
+
+```powershell
+.\scripts\install-user.ps1 -InstallDir "$env:TEMP\knowledge-agent-install-test" -NoPath
+```
+
+卸载当前用户安装：
+
+```powershell
+.\scripts\uninstall-user.ps1
+```
+
 ## LLM 配置
 
 当前第一版 LLM 接入使用 `llm-harness-core` 的 DeepSeek 示例路径。启动后端前设置：
