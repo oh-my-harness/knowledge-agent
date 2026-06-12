@@ -28,6 +28,7 @@ button {
 .content,
 .session-panel,
 .message-list,
+.confirmation-preview pre,
 .markdown-body pre,
 .markdown-body table {
   scrollbar-color: #b9c4d6 transparent;
@@ -38,6 +39,7 @@ button {
 .content::-webkit-scrollbar,
 .session-panel::-webkit-scrollbar,
 .message-list::-webkit-scrollbar,
+.confirmation-preview pre::-webkit-scrollbar,
 .markdown-body pre::-webkit-scrollbar,
 .markdown-body table::-webkit-scrollbar {
   width: 8px;
@@ -48,6 +50,7 @@ button {
 .content::-webkit-scrollbar-track,
 .session-panel::-webkit-scrollbar-track,
 .message-list::-webkit-scrollbar-track,
+.confirmation-preview pre::-webkit-scrollbar-track,
 .markdown-body pre::-webkit-scrollbar-track,
 .markdown-body table::-webkit-scrollbar-track {
   background: transparent;
@@ -57,6 +60,7 @@ button {
 .content::-webkit-scrollbar-thumb,
 .session-panel::-webkit-scrollbar-thumb,
 .message-list::-webkit-scrollbar-thumb,
+.confirmation-preview pre::-webkit-scrollbar-thumb,
 .markdown-body pre::-webkit-scrollbar-thumb,
 .markdown-body table::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
@@ -69,6 +73,7 @@ button {
 .content::-webkit-scrollbar-thumb:hover,
 .session-panel::-webkit-scrollbar-thumb:hover,
 .message-list::-webkit-scrollbar-thumb:hover,
+.confirmation-preview pre::-webkit-scrollbar-thumb:hover,
 .markdown-body pre::-webkit-scrollbar-thumb:hover,
 .markdown-body table::-webkit-scrollbar-thumb:hover {
   background: #8f9db2;
@@ -260,9 +265,27 @@ button {
   padding: 0 14px;
 }
 
-.primary-button:disabled {
+.secondary-button {
+  min-height: 36px;
+  border: 1px solid #cbd2df;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #3d4654;
+  cursor: pointer;
+  padding: 0 14px;
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
   cursor: wait;
   opacity: 0.7;
+}
+
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .priority {
@@ -272,6 +295,77 @@ button {
   color: #b42318;
   font-weight: 700;
   padding: 4px 7px;
+}
+
+.maintenance-section {
+  display: grid;
+  gap: 10px;
+}
+
+.maintenance-section h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.confirmation-item {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d8dde6;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.confirmation-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.confirmation-header h4 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.confirmation-header p {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+.confirmation-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.confirmation-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.confirmation-preview span {
+  display: block;
+  margin-bottom: 6px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.confirmation-preview pre {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #d8dde6;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #243041;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  padding: 10px;
+  white-space: pre-wrap;
 }
 
 .ask-page {
@@ -637,5 +731,15 @@ button {
     border-bottom: 1px solid #d8dde6;
     padding-right: 0;
     padding-bottom: 12px;
+  }
+
+  .confirmation-header,
+  .confirmation-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .confirmation-preview {
+    grid-template-columns: 1fr;
   }
 }

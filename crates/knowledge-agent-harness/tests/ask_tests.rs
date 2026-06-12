@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use knowledge_agent_core::vault::confirmation::list_confirmations;
 use knowledge_agent_harness::{
     AskError, AskRequest, AskRunner, DeepSeekAskRunner, FakeAskRunner, HarnessAskRunner,
     UnavailableAskRunner, vault_agent_tools, vault_read_tools,
@@ -216,4 +217,42 @@ async fn harness_runner_executes_vault_create_note_tool() {
         .await
         .unwrap();
     assert_eq!(written, "# New Note\n\nhello");
+}
+
+#[tokio::test]
+async fn harness_runner_queues_vault_update_proposal() {
+    let tmp = TempDir::new().unwrap();
+    let note_path = tmp.path().join("docs/note.md");
+    tokio::fs::create_dir_all(note_path.parent().unwrap())
+        .await
+        .unwrap();
+    tokio::fs::write(&note_path, "# Old\n").await.unwrap();
+    let client = Arc::new(MockLlmClient::new(vec![
+        MockResponse::tool_use(
+            "tool-1",
+            "vault_propose_note_update",
+            r##"{"path":"docs/note.md","replacement_content":"# New\n","reason":"test proposal"}"##,
+        ),
+        MockResponse::text("queued"),
+    ])) as Arc<dyn LlmClient>;
+    let runner = HarnessAskRunner::new_in_memory_with_tools(
+        client,
+        "test-model".to_string(),
+        vault_agent_tools(tmp.path()),
+    )
+    .await;
+
+    let response = runner
+        .ask(AskRequest {
+            message: "propose update".to_string(),
+            session_id: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(response.answer, "queued");
+    let queue = list_confirmations(tmp.path()).unwrap();
+    assert_eq!(queue.items.len(), 1);
+    assert_eq!(queue.items[0].path, "docs/note.md");
+    assert_eq!(queue.items[0].proposed_content, "# New\n");
 }

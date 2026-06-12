@@ -2,11 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   askEventsUrl,
   askVault,
+  applyConfirmation,
   createAskSession,
   getAskSessionMessages,
   getLocalSettings,
   getVaultIndex,
+  listConfirmations,
   listAskSessions,
+  rejectConfirmation,
   runMaintenanceScan,
   saveLocalSettings
 } from "./api";
@@ -76,6 +79,28 @@ describe("api client", () => {
     });
     const inbox = await runMaintenanceScan();
     expect(inbox.items[0].kind).toBe("broken_wikilink");
+  });
+
+  it("manages confirmation queue", async () => {
+    const item = {
+      id: "item-1",
+      kind: "replace_note",
+      path: "a.md",
+      reason: null,
+      original_content: "old",
+      proposed_content: "new",
+      created_at: "1"
+    };
+    mockFetch({ items: [item] });
+    await expect(listConfirmations()).resolves.toEqual({ items: [item] });
+
+    mockFetch(item);
+    await expect(applyConfirmation("item/1")).resolves.toEqual(item);
+    expect(fetch).toHaveBeenCalledWith("/api/confirmations/item%2F1/apply", { method: "POST" });
+
+    mockFetch(item);
+    await expect(rejectConfirmation("item/1")).resolves.toEqual(item);
+    expect(fetch).toHaveBeenLastCalledWith("/api/confirmations/item%2F1/reject", { method: "POST" });
   });
 
   it("asks the vault through the ask endpoint", async () => {

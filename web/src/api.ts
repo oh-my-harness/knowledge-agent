@@ -1,4 +1,13 @@
-import type { AskResponse, ChatMessage, ChatSession, LocalSettings, MaintenanceInbox, VaultScan } from "./types";
+import type {
+  AskResponse,
+  ChatMessage,
+  ChatSession,
+  ConfirmationItem,
+  ConfirmationQueue,
+  LocalSettings,
+  MaintenanceInbox,
+  VaultScan
+} from "./types";
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
@@ -26,6 +35,18 @@ export function saveLocalSettings(settings: LocalSettings): Promise<LocalSetting
 
 export function runMaintenanceScan(): Promise<MaintenanceInbox> {
   return requestJson<MaintenanceInbox>("/api/maintenance/scan", { method: "POST" });
+}
+
+export function listConfirmations(): Promise<ConfirmationQueue> {
+  return requestJson<ConfirmationQueue>("/api/confirmations");
+}
+
+export function applyConfirmation(id: string): Promise<ConfirmationItem> {
+  return requestJson<ConfirmationItem>(`/api/confirmations/${encodeURIComponent(id)}/apply`, { method: "POST" });
+}
+
+export function rejectConfirmation(id: string): Promise<ConfirmationItem> {
+  return requestJson<ConfirmationItem>(`/api/confirmations/${encodeURIComponent(id)}/reject`, { method: "POST" });
 }
 
 export function listAskSessions(): Promise<ChatSession[]> {

@@ -5,6 +5,7 @@ use std::{
 
 use futures::future::BoxFuture;
 use knowledge_agent_core::vault::{
+    confirmation::{CreateReplaceNoteConfirmation, create_replace_note_confirmation},
     graph::build_link_graph,
     policy::{VaultWriteOperation, VaultWritePolicy, WriteDecision},
     scanner::scan_vault,
@@ -528,6 +529,7 @@ struct ProposeNoteUpdateArgs {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct ProposeNoteUpdateResult {
+    confirmation_id: String,
     path: String,
     written: bool,
     requires_confirmation: bool,
@@ -597,8 +599,18 @@ impl Tool for ProposeNoteUpdateTool {
             let decision = VaultWritePolicy.decide(&VaultWriteOperation::ModifyBodyMeaning {
                 path: normalized.clone(),
             });
+            let item = create_replace_note_confirmation(
+                self.vault_root.as_ref(),
+                CreateReplaceNoteConfirmation {
+                    path: normalized.clone(),
+                    reason: args.reason.clone(),
+                    proposed_content: args.replacement_content.clone(),
+                },
+            )
+            .map_err(to_tool_error)?;
 
             ok_json(ProposeNoteUpdateResult {
+                confirmation_id: item.id,
                 path: normalized,
                 written: false,
                 requires_confirmation: decision == WriteDecision::RequireConfirmation,

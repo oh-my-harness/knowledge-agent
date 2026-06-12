@@ -2,6 +2,9 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use knowledge_agent_core::vault::confirmation::{
+    CreateReplaceNoteConfirmation, create_replace_note_confirmation,
+};
 use knowledge_agent_server::{AppState, build_router};
 use std::path::Path;
 use tower::ServiceExt;
@@ -105,6 +108,78 @@ async fn local_settings_can_be_saved_and_loaded() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["llm"]["deepseek_model"], "deepseek-chat");
     assert_eq!(json["web_search"]["enabled"], true);
+}
+
+#[tokio::test]
+async fn confirmations_can_be_listed_applied_and_rejected() {
+    let vault = tempfile::tempdir().expect("tempdir");
+    let note_path = vault.path().join("note.md");
+    std::fs::write(&note_path, "# Old\n").unwrap();
+    let apply_item = create_replace_note_confirmation(
+        vault.path(),
+        CreateReplaceNoteConfirmation {
+            path: "note.md".to_string(),
+            reason: Some("test apply".to_string()),
+            proposed_content: "# New\n".to_string(),
+        },
+    )
+    .unwrap();
+    let reject_item = create_replace_note_confirmation(
+        vault.path(),
+        CreateReplaceNoteConfirmation {
+            path: "note.md".to_string(),
+            reason: Some("test reject".to_string()),
+            proposed_content: "# Rejected\n".to_string(),
+        },
+    )
+    .unwrap();
+    let app = build_router(AppState::new_with_fake_ask_runner(
+        vault.path().to_path_buf(),
+        "fake llm answer",
+    ));
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/confirmations")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(list_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["items"].as_array().unwrap().len(), 2);
+
+    let apply_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/confirmations/{}/apply", apply_item.id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(apply_response.status(), StatusCode::OK);
+    assert_eq!(std::fs::read_to_string(&note_path).unwrap(), "# New\n");
+
+    let reject_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/confirmations/{}/reject", reject_item.id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(reject_response.status(), StatusCode::OK);
 }
 
 #[tokio::test]

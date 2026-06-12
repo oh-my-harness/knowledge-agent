@@ -21,6 +21,9 @@ cargo run -p knowledge-agent-cli -- serve crates/knowledge-agent-core/tests/fixt
 - `GET /api/health`
 - `GET /api/vault/index`
 - `POST /api/maintenance/scan`
+- `GET /api/confirmations`
+- `POST /api/confirmations/{id}/apply`
+- `POST /api/confirmations/{id}/reject`
 
 ## Web UI 开发
 
@@ -78,6 +81,14 @@ Web 设置页会读写：
 
 该目录是个人运行状态，已经被 `.gitignore` 忽略，不应提交到远端知识库。
 
+需要用户确认的编辑提案保存到：
+
+```text
+.knowledge-agent/confirmations/
+```
+
+该目录同样是个人运行状态，不应提交到远端知识库。维护页会展示这些待确认修改，用户可以确认应用或拒绝。
+
 Web 聊天界面支持多个会话：
 
 - 会话列表、创建和切换通过 `/api/ask/sessions` 系列接口管理。
@@ -95,6 +106,6 @@ Web 聊天界面支持多个会话：
 
 - `vault_create_note`：在 vault 内创建新的 Markdown 笔记，不会覆盖已有文件。
 - `vault_append_index_entry`：按写入策略自动追加低风险 index 条目。
-- `vault_propose_note_update`：为既有笔记生成替换内容提案，但不直接写入。
+- `vault_propose_note_update`：为既有笔记生成替换内容提案，写入本地确认队列，但不直接覆盖原文件。
 
-编辑工具遵守安全边界：创建新文件和低风险 index 追加可以自动执行；修改既有正文、删除、移动或重命名笔记必须先提出方案并等待用户确认。
+编辑工具遵守安全边界：创建新文件和低风险 index 追加可以自动执行；修改既有正文必须先进入确认队列，由用户在 Web UI 中确认后才会写入；删除、移动或重命名笔记仍未开放自动执行。

@@ -10,7 +10,10 @@ use futures::{Stream, stream};
 use knowledge_agent_core::{
     maintenance::checks::run_maintenance_scan,
     settings::{LocalSettings, load_local_settings, save_local_settings},
-    vault::scanner::scan_vault,
+    vault::{
+        confirmation::{apply_confirmation, list_confirmations, reject_confirmation},
+        scanner::scan_vault,
+    },
 };
 use knowledge_agent_harness as harness;
 use serde::{Deserialize, Serialize};
@@ -70,6 +73,15 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/health", get(health))
         .route("/api/vault/index", get(vault_index))
         .route("/api/maintenance/scan", post(maintenance_scan))
+        .route("/api/confirmations", get(confirmations))
+        .route(
+            "/api/confirmations/{confirmation_id}/apply",
+            post(apply_confirmation_route),
+        )
+        .route(
+            "/api/confirmations/{confirmation_id}/reject",
+            post(reject_confirmation_route),
+        )
         .route("/api/settings/local", get(local_settings))
         .route("/api/settings/local", post(save_settings))
         .route("/api/ask/sessions", get(list_ask_sessions))
@@ -97,6 +109,30 @@ async fn vault_index(State(state): State<AppState>) -> ApiResult<impl Serialize>
 
 async fn maintenance_scan(State(state): State<AppState>) -> ApiResult<impl Serialize> {
     run_maintenance_scan(&state.vault_root)
+        .map(Json)
+        .map_err(internal_error)
+}
+
+async fn confirmations(State(state): State<AppState>) -> ApiResult<impl Serialize> {
+    list_confirmations(state.vault_root.as_ref())
+        .map(Json)
+        .map_err(internal_error)
+}
+
+async fn apply_confirmation_route(
+    State(state): State<AppState>,
+    Path(confirmation_id): Path<String>,
+) -> ApiResult<impl Serialize> {
+    apply_confirmation(state.vault_root.as_ref(), &confirmation_id)
+        .map(Json)
+        .map_err(internal_error)
+}
+
+async fn reject_confirmation_route(
+    State(state): State<AppState>,
+    Path(confirmation_id): Path<String>,
+) -> ApiResult<impl Serialize> {
+    reject_confirmation(state.vault_root.as_ref(), &confirmation_id)
         .map(Json)
         .map_err(internal_error)
 }

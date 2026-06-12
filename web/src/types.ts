@@ -28,6 +28,20 @@ export interface MaintenanceInbox {
   items: MaintenanceItem[];
 }
 
+export interface ConfirmationQueue {
+  items: ConfirmationItem[];
+}
+
+export interface ConfirmationItem {
+  id: string;
+  kind: "replace_note";
+  path: string;
+  reason: string | null;
+  original_content: string;
+  proposed_content: string;
+  created_at: string;
+}
+
 export interface LocalSettings {
   llm: {
     provider: string;

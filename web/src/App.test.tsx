@@ -61,6 +61,9 @@ function mockFetch(answer = "我已经收到你的问题。") {
           ]
         });
       }
+      if (url === "/api/confirmations") {
+        return ok({ items: [] });
+      }
       if (url === "/api/settings/local") {
         return ok(localSettings());
       }
@@ -161,6 +164,48 @@ function mockSessionScrollFetch() {
   );
 }
 
+function mockConfirmationFetch() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/ask/sessions") {
+        return ok([{ id: "default", name: "默认会话", updated_at: null }]);
+      }
+      if (url === "/api/ask/sessions/default/messages") {
+        return ok([]);
+      }
+      if (url === "/api/confirmations") {
+        return ok({
+          items: [
+            {
+              id: "item-1",
+              kind: "replace_note",
+              path: "docs/note.md",
+              reason: "补充说明",
+              original_content: "# Old",
+              proposed_content: "# New",
+              created_at: "1"
+            }
+          ]
+        });
+      }
+      if (url === "/api/confirmations/item-1/apply" && init?.method === "POST") {
+        return ok({
+          id: "item-1",
+          kind: "replace_note",
+          path: "docs/note.md",
+          reason: "补充说明",
+          original_content: "# Old",
+          proposed_content: "# New",
+          created_at: "1"
+        });
+      }
+      return notFound();
+    })
+  );
+}
+
 describe("App", () => {
   it("starts on the ask page without service status navigation", async () => {
     mockFetch();
@@ -189,6 +234,21 @@ describe("App", () => {
 
     expect(await screen.findByText("broken_wikilink")).toBeInTheDocument();
     expect(screen.getByText("Missing target [[LLM Harness]]")).toBeInTheDocument();
+  });
+
+  it("shows and applies confirmation queue items", async () => {
+    mockConfirmationFetch();
+    render(<App />);
+
+    await userEvent.click(screen.getByRole("button", { name: "维护扫描" }));
+
+    expect(await screen.findByText("docs/note.md")).toBeInTheDocument();
+    expect(screen.getByText("# Old")).toBeInTheDocument();
+    expect(screen.getByText("# New")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "确认应用" }));
+
+    expect(fetch).toHaveBeenCalledWith("/api/confirmations/item-1/apply", { method: "POST" });
   });
 
   it("loads and saves local settings", async () => {
