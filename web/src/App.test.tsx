@@ -288,10 +288,9 @@ describe("App", () => {
     render(<App />);
 
     await userEvent.click(screen.getByRole("button", { name: "设置" }));
-    expect(await screen.findByText("当前配置")).toBeInTheDocument();
-    expect(screen.getAllByText("deepseek-v4-flash").length).toBeGreaterThan(0);
-    expect(screen.getByText("未配置")).toBeInTheDocument();
-    expect(screen.getByText("未启用")).toBeInTheDocument();
+    expect(await screen.findByLabelText("模型名")).toHaveValue("deepseek-v4-flash");
+    expect(screen.getByLabelText("DeepSeek API Key")).toHaveValue("");
+    expect(screen.getByRole("checkbox", { name: "启用网页搜索工具" })).not.toBeChecked();
 
     await userEvent.clear(await screen.findByLabelText("模型名"));
     await userEvent.type(screen.getByLabelText("模型名"), "deepseek-chat");

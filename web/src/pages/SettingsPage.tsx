@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { getLocalSettings, saveLocalSettings } from "../api";
 import type { LocalSettings } from "../types";
 
@@ -18,6 +19,7 @@ export function SettingsPage() {
   const [settings, setSettings] = useState<LocalSettings>(defaultSettings);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,9 +59,6 @@ export function SettingsPage() {
     }
   }
 
-  const apiKeyStatus = settings.llm.deepseek_api_key?.trim() ? "已配置" : "未配置";
-  const webSearchStatus = settings.web_search.enabled ? "已启用" : "未启用";
-
   return (
     <section className="page settings-page">
       <header className="page-header">
@@ -71,32 +70,6 @@ export function SettingsPage() {
         <p className="muted">加载设置中</p>
       ) : (
         <form className="settings-form" onSubmit={handleSubmit}>
-          <section className="settings-section">
-            <h3>当前配置</h3>
-            <dl className="settings-summary">
-              <div>
-                <dt>模型 Provider</dt>
-                <dd>{settings.llm.provider}</dd>
-              </div>
-              <div>
-                <dt>模型名</dt>
-                <dd>{settings.llm.deepseek_model || "未设置"}</dd>
-              </div>
-              <div>
-                <dt>DeepSeek API Key</dt>
-                <dd>{apiKeyStatus}</dd>
-              </div>
-              <div>
-                <dt>网页搜索</dt>
-                <dd>{webSearchStatus}</dd>
-              </div>
-              <div>
-                <dt>搜索 Provider</dt>
-                <dd>{settings.web_search.provider}</dd>
-              </div>
-            </dl>
-          </section>
-
           <section className="settings-section">
             <h3>模型</h3>
             <label className="field">
@@ -116,18 +89,28 @@ export function SettingsPage() {
 
             <label className="field">
               <span>DeepSeek API Key</span>
-              <input
-                autoComplete="off"
-                type="password"
-                value={settings.llm.deepseek_api_key ?? ""}
-                onChange={(event) =>
-                  setSettings((current) => ({
-                    ...current,
-                    llm: { ...current.llm, deepseek_api_key: event.target.value }
-                  }))
-                }
-                placeholder="sk-..."
-              />
+              <span className="secret-input">
+                <input
+                  autoComplete="off"
+                  type={showApiKey ? "text" : "password"}
+                  value={settings.llm.deepseek_api_key ?? ""}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      llm: { ...current.llm, deepseek_api_key: event.target.value }
+                    }))
+                  }
+                  placeholder="sk-..."
+                />
+                <button
+                  aria-label={showApiKey ? "隐藏 API Key" : "显示 API Key"}
+                  className="icon-button"
+                  onClick={() => setShowApiKey((current) => !current)}
+                  type="button"
+                >
+                  {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </span>
             </label>
 
             <label className="field">
