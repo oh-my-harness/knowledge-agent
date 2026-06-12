@@ -931,6 +931,7 @@ dependencies = [
  "llm-harness-loop",
  "llm_adapter",
  "serde",
+ "tempfile",
  "thiserror",
  "tokio",
 ]

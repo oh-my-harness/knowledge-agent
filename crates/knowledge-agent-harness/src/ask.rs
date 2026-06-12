@@ -1,10 +1,15 @@
-use std::sync::Arc;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use llm_adapter::deepseek;
 use llm_harness::prelude::{
-    AgentHarness, AgentHarnessOptions, AgentMessage, ContentBlock, ExecutionEnv, UnsupportedEnv,
+    AgentHarness, AgentHarnessOptions, AgentMessage, ContentBlock, ExecutionEnv, JsonlSessionRepo,
+    Session, SessionRepo, UnsupportedEnv,
 };
+use llm_harness::session::{CreateSessionOptions, ListSessionOptions};
 use llm_harness_loop::LlmClient;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -29,6 +34,8 @@ pub enum AskError {
     MissingApiKey,
     #[error("llm returned no assistant text")]
     EmptyAnswer,
+    #[error("session error: {0}")]
+    Session(String),
     #[error("llm harness error: {0}")]
     Harness(String),
 }
@@ -80,6 +87,8 @@ impl AskRunner for UnavailableAskRunner {
 pub struct DeepSeekAskRunner {
     api_key: String,
     model: String,
+    sessions_root: Option<PathBuf>,
+    session_name: String,
     harness: Mutex<Option<HarnessAskRunner>>,
 }
 
@@ -88,7 +97,25 @@ impl DeepSeekAskRunner {
         Self::from_env_with(|name| std::env::var(name).ok())
     }
 
+    pub fn from_env_with_sessions_root(
+        sessions_root: impl Into<PathBuf>,
+    ) -> Result<Self, AskError> {
+        Self::from_env_with_options(
+            |name| std::env::var(name).ok(),
+            Some(sessions_root.into()),
+            "default".to_string(),
+        )
+    }
+
     pub fn from_env_with(get_var: impl Fn(&str) -> Option<String>) -> Result<Self, AskError> {
+        Self::from_env_with_options(get_var, None, "default".to_string())
+    }
+
+    pub fn from_env_with_options(
+        get_var: impl Fn(&str) -> Option<String>,
+        sessions_root: Option<PathBuf>,
+        session_name: String,
+    ) -> Result<Self, AskError> {
         let api_key = get_var("DEEPSEEK_API_KEY")
             .filter(|value| !value.trim().is_empty())
             .ok_or(AskError::MissingApiKey)?;
@@ -99,6 +126,8 @@ impl DeepSeekAskRunner {
         Ok(Self {
             api_key,
             model,
+            sessions_root,
+            session_name,
             harness: Mutex::new(None),
         })
     }
@@ -110,7 +139,17 @@ impl AskRunner for DeepSeekAskRunner {
         let mut harness = self.harness.lock().await;
         if harness.is_none() {
             let client = Arc::new(deepseek::client(self.api_key.clone())) as Arc<dyn LlmClient>;
-            *harness = Some(HarnessAskRunner::new_in_memory(client, self.model.clone()).await);
+            *harness = Some(if let Some(sessions_root) = &self.sessions_root {
+                HarnessAskRunner::new_jsonl(
+                    client,
+                    self.model.clone(),
+                    sessions_root,
+                    self.session_name.clone(),
+                )
+                .await?
+            } else {
+                HarnessAskRunner::new_in_memory(client, self.model.clone()).await
+            });
         }
 
         harness
@@ -130,6 +169,22 @@ impl HarnessAskRunner {
         Self::new_in_memory_with_env(client, Arc::new(UnsupportedEnv::new()), model).await
     }
 
+    pub async fn new_jsonl(
+        client: Arc<dyn LlmClient>,
+        model: String,
+        sessions_root: impl AsRef<Path>,
+        session_name: String,
+    ) -> Result<Self, AskError> {
+        Self::new_jsonl_with_env(
+            client,
+            Arc::new(UnsupportedEnv::new()),
+            model,
+            sessions_root,
+            session_name,
+        )
+        .await
+    }
+
     pub async fn new_in_memory_with_env(
         client: Arc<dyn LlmClient>,
         env: Arc<dyn ExecutionEnv>,
@@ -142,6 +197,51 @@ impl HarnessAskRunner {
         Self {
             harness: Mutex::new(harness),
         }
+    }
+
+    pub async fn new_jsonl_with_env(
+        client: Arc<dyn LlmClient>,
+        env: Arc<dyn ExecutionEnv>,
+        model: String,
+        sessions_root: impl AsRef<Path>,
+        session_name: String,
+    ) -> Result<Self, AskError> {
+        tokio::fs::create_dir_all(sessions_root.as_ref())
+            .await
+            .map_err(|err| AskError::Session(err.to_string()))?;
+
+        let repo = JsonlSessionRepo::new(sessions_root.as_ref());
+        let existing = repo
+            .list(ListSessionOptions {
+                name_contains: Some(session_name.clone()),
+                ..ListSessionOptions::default()
+            })
+            .await
+            .map_err(|err| AskError::Session(err.to_string()))?
+            .into_iter()
+            .find(|metadata| metadata.name.as_deref() == Some(session_name.as_str()));
+
+        let storage = if let Some(metadata) = existing {
+            repo.open(&metadata.id)
+                .await
+                .map_err(|err| AskError::Session(err.to_string()))?
+        } else {
+            repo.create(CreateSessionOptions {
+                name: Some(session_name),
+                initial_model: Some(model.clone()),
+                ..CreateSessionOptions::default()
+            })
+            .await
+            .map_err(|err| AskError::Session(err.to_string()))?
+        };
+
+        let mut options = AgentHarnessOptions::new(model);
+        options.system_prompt = Some(SYSTEM_PROMPT.to_string());
+        let harness = AgentHarness::with_session(client, env, Session::new(storage), options);
+
+        Ok(Self {
+            harness: Mutex::new(harness),
+        })
     }
 
     pub async fn context_messages(&self) -> Result<Vec<AgentMessage>, AskError> {

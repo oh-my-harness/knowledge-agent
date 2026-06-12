@@ -16,3 +16,4 @@ tokio.workspace = true
 
 [dev-dependencies]
 llm-harness-loop = { workspace = true, features = ["test-utils"] }
+tempfile.workspace = true

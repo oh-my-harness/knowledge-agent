@@ -8,6 +8,7 @@ use llm_harness_loop::{
     LlmClient,
     test_utils::{MockLlmClient, MockResponse},
 };
+use tempfile::TempDir;
 
 #[tokio::test]
 async fn fake_runner_returns_configured_answer() {
@@ -75,6 +76,55 @@ async fn harness_runner_keeps_context_between_turns() {
     assert!(
         messages.len() >= 4,
         "expected user/assistant messages from two turns, got {}",
+        messages.len()
+    );
+}
+
+#[tokio::test]
+async fn harness_runner_reopens_jsonl_session() {
+    let tmp = TempDir::new().unwrap();
+    let first_client = Arc::new(MockLlmClient::new(vec![MockResponse::text("first answer")]))
+        as Arc<dyn LlmClient>;
+    let first_runner = HarnessAskRunner::new_jsonl(
+        first_client,
+        "test-model".to_string(),
+        tmp.path(),
+        "default".to_string(),
+    )
+    .await
+    .unwrap();
+
+    first_runner
+        .ask(AskRequest {
+            message: "first question".to_string(),
+        })
+        .await
+        .unwrap();
+    drop(first_runner);
+
+    let second_client = Arc::new(MockLlmClient::new(vec![MockResponse::text(
+        "second answer",
+    )])) as Arc<dyn LlmClient>;
+    let second_runner = HarnessAskRunner::new_jsonl(
+        second_client,
+        "test-model".to_string(),
+        tmp.path(),
+        "default".to_string(),
+    )
+    .await
+    .unwrap();
+    let second = second_runner
+        .ask(AskRequest {
+            message: "second question".to_string(),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(second.answer, "second answer");
+    let messages = second_runner.context_messages().await.unwrap();
+    assert!(
+        messages.len() >= 4,
+        "expected persisted messages from two turns, got {}",
         messages.len()
     );
 }
