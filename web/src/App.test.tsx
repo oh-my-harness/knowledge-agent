@@ -250,8 +250,12 @@ describe("App", () => {
     expect(screen.queryByRole("status", { name: "助手正在思考" })).not.toBeInTheDocument();
   });
 
-  it("scrolls new sessions to latest and restores previous session positions", async () => {
+  it("scrolls sessions to the latest message when opened", async () => {
     const scrollHeight = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(1000);
+    const clientHeight = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(400);
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
     mockSessionScrollFetch();
     render(<App />);
 
@@ -271,9 +275,12 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "默认会话" }));
     await screen.findByText("默认回答");
-    await waitFor(() => expect(messageList.scrollTop).toBe(120));
+    await waitFor(() => expect(messageList.scrollTop).toBe(1000));
+    expect(scrollIntoView).toHaveBeenCalled();
 
+    clientHeight.mockRestore();
     scrollHeight.mockRestore();
+    HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
   });
 
   it("renders assistant markdown", async () => {

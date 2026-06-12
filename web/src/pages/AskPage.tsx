@@ -16,9 +16,10 @@ export function AskPage() {
   const [agentActivity, setAgentActivity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
-  const sessionScrollPositions = useRef<Record<string, number>>({});
+  const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollSession = useRef<string | null>(null);
   const restoreScrollFrames = useRef<number[]>([]);
+  const shouldStickToBottom = useRef(true);
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId),
     [activeSessionId, sessions]
@@ -54,6 +55,7 @@ export function AskPage() {
   useEffect(() => {
     let isCurrent = true;
     pendingScrollSession.current = activeSessionId;
+    shouldStickToBottom.current = true;
     setIsLoadingMessages(true);
     getAskSessionMessages(activeSessionId)
       .then((loadedMessages) => {
@@ -80,22 +82,26 @@ export function AskPage() {
   }, [activeSessionId]);
 
   useEffect(() => {
-    if (isLoadingMessages || pendingScrollSession.current !== activeSessionId) {
+    const shouldScroll =
+      !isLoadingMessages &&
+      (pendingScrollSession.current === activeSessionId || shouldStickToBottom.current);
+    if (!shouldScroll) {
       return;
     }
 
     const messageList = messageListRef.current;
-    if (!messageList) {
+    const bottomAnchor = bottomAnchorRef.current;
+    if (!messageList || !bottomAnchor) {
       return;
     }
 
-    const savedPosition = sessionScrollPositions.current[activeSessionId];
     restoreScrollFrames.current.forEach((frame) => cancelAnimationFrame(frame));
     restoreScrollFrames.current = [];
 
     const firstFrame = requestAnimationFrame(() => {
       const secondFrame = requestAnimationFrame(() => {
-        messageList.scrollTop = savedPosition ?? messageList.scrollHeight;
+        bottomAnchor.scrollIntoView?.({ block: "end" });
+        messageList.scrollTop = messageList.scrollHeight;
         pendingScrollSession.current = null;
         restoreScrollFrames.current = [];
       });
@@ -107,7 +113,7 @@ export function AskPage() {
       restoreScrollFrames.current.forEach((frame) => cancelAnimationFrame(frame));
       restoreScrollFrames.current = [];
     };
-  }, [activeSessionId, isLoadingMessages, messages]);
+  }, [activeSessionId, agentActivity, isLoadingMessages, isSending, messages]);
 
   useEffect(() => {
     if (typeof EventSource === "undefined") {
@@ -143,6 +149,7 @@ export function AskPage() {
     setMessages((current) => [...current, { role: "user", content: message }]);
     setInput("");
     setIsSending(true);
+    shouldStickToBottom.current = true;
     setAgentActivity("正在思考");
     setError(null);
 
@@ -197,7 +204,10 @@ export function AskPage() {
       return;
     }
 
-    sessionScrollPositions.current[activeSessionId] = event.currentTarget.scrollTop;
+    const messageList = event.currentTarget;
+    const distanceFromBottom =
+      messageList.scrollHeight - messageList.scrollTop - messageList.clientHeight;
+    shouldStickToBottom.current = distanceFromBottom < 80;
   }
 
   return (
@@ -264,6 +274,7 @@ export function AskPage() {
               </div>
             </article>
           )}
+          <div aria-hidden="true" ref={bottomAnchorRef} />
         </div>
       </div>
       {error && <p className="error-text">{error}</p>}
