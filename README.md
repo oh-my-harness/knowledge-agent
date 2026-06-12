@@ -7,8 +7,11 @@ Knowledge Agent 是一个本地运行的研究助手和 Obsidian vault 维护工
 在 Obsidian vault 根目录运行：
 
 ```powershell
+knowledge-agent init .
 knowledge-agent serve .
 ```
+
+`init` 会创建共享配置 `.knowledge-agent.toml`，创建本机运行状态目录 `.knowledge-agent/`，并把 `.knowledge-agent/` 写入 vault 的 `.gitignore`。
 
 如果当前目录或可执行文件所在目录存在 `web/dist/index.html`，服务会自动加载 Web UI。也可以显式指定前端静态文件目录：
 
@@ -38,6 +41,14 @@ cargo run -p knowledge-agent-cli -- serve crates/knowledge-agent-core/tests/fixt
 - `POST /api/confirmations/{id}/reject`
 - `GET /api/ask/sessions`
 - `POST /api/ask`
+
+## Vault 文件约定
+
+- `.knowledge-agent.toml` 是共享 vault 配置，可以随知识库提交。
+- `.knowledge-agent/` 是本机运行状态和个人配置，应该被 Git 忽略。
+- `.knowledge-agent/local.toml` 保存本机 LLM 和网页搜索配置。
+- `.knowledge-agent/sessions/` 保存聊天会话。
+- `.knowledge-agent/confirmations/` 保存待确认编辑提案。
 
 ## Web UI 开发
 
@@ -90,6 +101,7 @@ dist/knowledge-agent.zip
 
 ```powershell
 cd dist\knowledge-agent
+.\knowledge-agent.exe init <你的 Obsidian vault 路径>
 .\knowledge-agent.exe serve <你的 Obsidian vault 路径>
 ```
 

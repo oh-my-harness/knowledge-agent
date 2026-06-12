@@ -11,5 +11,6 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+knowledge-agent-core = { path = "../knowledge-agent-core" }
 knowledge-agent-server = { path = "../knowledge-agent-server" }
 tokio.workspace = true

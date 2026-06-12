@@ -1,5 +1,6 @@
 use knowledge_agent_core::settings::{
-    LocalSettings, VaultSettings, load_local_settings, load_vault_settings, save_local_settings,
+    LocalSettings, VaultSettings, init_vault, load_local_settings, load_vault_settings,
+    save_local_settings,
 };
 use std::path::Path;
 
@@ -49,4 +50,43 @@ fn defaults_when_local_settings_missing() {
     let settings = load_local_settings(temp.path()).expect("defaults should load");
 
     assert_eq!(settings, LocalSettings::default());
+}
+
+#[test]
+fn init_vault_creates_shared_config_and_ignores_local_state() {
+    let temp = tempfile::tempdir().expect("tempdir");
+
+    let report = init_vault(temp.path()).expect("vault should initialize");
+
+    assert!(report.created_vault_settings);
+    assert!(report.created_local_state_dir);
+    assert!(report.updated_gitignore);
+    assert!(report.vault_settings_path.exists());
+    assert!(report.local_state_dir.is_dir());
+    let gitignore = std::fs::read_to_string(report.gitignore_path).expect("gitignore");
+    assert!(gitignore.lines().any(|line| line == ".knowledge-agent/"));
+    assert_eq!(
+        load_vault_settings(temp.path()).expect("settings"),
+        VaultSettings::default()
+    );
+}
+
+#[test]
+fn init_vault_is_idempotent() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    init_vault(temp.path()).expect("first init");
+
+    let report = init_vault(temp.path()).expect("second init");
+
+    assert!(!report.created_vault_settings);
+    assert!(!report.created_local_state_dir);
+    assert!(!report.updated_gitignore);
+    let gitignore = std::fs::read_to_string(report.gitignore_path).expect("gitignore");
+    assert_eq!(
+        gitignore
+            .lines()
+            .filter(|line| line.trim() == ".knowledge-agent/")
+            .count(),
+        1
+    );
 }
