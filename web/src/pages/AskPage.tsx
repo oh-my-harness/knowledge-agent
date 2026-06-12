@@ -181,6 +181,17 @@ export function AskPage() {
               </article>
             ))
           )}
+          {!isLoadingMessages && isSending && (
+            <article className="message assistant thinking" aria-label="助手正在思考" role="status">
+              <span>助手</span>
+              <div className="thinking-indicator">
+                <span aria-hidden="true" />
+                <span aria-hidden="true" />
+                <span aria-hidden="true" />
+                <p>正在思考</p>
+              </div>
+            </article>
+          )}
         </div>
       </div>
       {error && <p className="error-text">{error}</p>}

@@ -320,6 +320,10 @@ button {
   background: #eef4ff;
 }
 
+.message.thinking {
+  color: #4f5f75;
+}
+
 .message span {
   display: block;
   margin-bottom: 5px;
@@ -436,6 +440,47 @@ button {
 
 .markdown-body a {
   color: #1f4fbf;
+}
+
+.thinking-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.thinking-indicator span {
+  width: 7px;
+  height: 7px;
+  margin: 0;
+  border-radius: 999px;
+  background: #8aa4d6;
+  animation: thinking-pulse 1.2s ease-in-out infinite;
+}
+
+.thinking-indicator span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.thinking-indicator span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.thinking-indicator p {
+  margin: 0 0 0 4px;
+}
+
+@keyframes thinking-pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
 }
 
 .ask-form {

@@ -101,6 +101,38 @@ function mockAskFailure() {
   );
 }
 
+function mockDelayedAsk(answer = "我已经想好了。") {
+  let resolveAsk: () => void = () => {};
+  const askReady = new Promise<void>((resolve) => {
+    resolveAsk = resolve;
+  });
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/ask/sessions") {
+        return ok([{ id: "default", name: "默认会话", updated_at: null }]);
+      }
+      if (url === "/api/ask/sessions/default/messages") {
+        return ok([]);
+      }
+      if (url === "/api/ask") {
+        return askReady.then(() =>
+          ok({
+            answer,
+            sources: [],
+            requires_followup: false
+          })
+        );
+      }
+      return notFound();
+    })
+  );
+
+  return { resolveAsk };
+}
+
 describe("App", () => {
   it("starts on the ask page without service status navigation", async () => {
     mockFetch();
@@ -173,6 +205,21 @@ describe("App", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ message: "什么是 Agent Harness？", session_id: "default", mode: "vault" })
     });
+  });
+
+  it("shows a thinking state while the assistant is working", async () => {
+    const { resolveAsk } = mockDelayedAsk();
+    render(<App />);
+
+    await screen.findAllByText("默认会话");
+    await userEvent.type(screen.getByLabelText("问题"), "继续研究{enter}");
+
+    expect(await screen.findByRole("status", { name: "助手正在思考" })).toBeInTheDocument();
+
+    resolveAsk();
+
+    expect(await screen.findByText("我已经想好了。")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "助手正在思考" })).not.toBeInTheDocument();
   });
 
   it("renders assistant markdown", async () => {
