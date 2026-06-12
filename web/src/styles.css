@@ -210,13 +210,11 @@ button {
   color: #166534;
 }
 
-.note-list,
 .inbox-list {
   display: grid;
   gap: 10px;
 }
 
-.note-row,
 .inbox-item {
   display: flex;
   justify-content: space-between;
@@ -227,32 +225,15 @@ button {
   padding: 14px;
 }
 
-.note-row h3,
 .inbox-item h3 {
   margin: 0 0 4px;
   font-size: 16px;
 }
 
-.note-row p,
 .inbox-item p {
   margin: 0;
   color: #667085;
   font-size: 13px;
-}
-
-.tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.tag {
-  border-radius: 999px;
-  background: #eef4ff;
-  color: #1f4fbf;
-  padding: 4px 8px;
-  font-size: 12px;
 }
 
 .primary-button {

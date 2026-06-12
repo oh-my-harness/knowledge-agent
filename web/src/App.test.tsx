@@ -247,17 +247,8 @@ describe("App", () => {
     render(<App />);
 
     expect(screen.queryByRole("button", { name: "服务状态" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "知识库" })).not.toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "提问" })).toBeInTheDocument();
-  });
-
-  it("shows vault notes", async () => {
-    mockFetch();
-    render(<App />);
-
-    await userEvent.click(screen.getByRole("button", { name: "知识库" }));
-
-    expect(await screen.findByText("Agent Harness")).toBeInTheDocument();
-    expect(screen.getByText("docs/concepts/agent-harness.md")).toBeInTheDocument();
   });
 
   it("runs maintenance scan", async () => {
