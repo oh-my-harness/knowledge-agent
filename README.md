@@ -91,4 +91,10 @@ Web 聊天界面支持多个会话：
 - `vault_search_notes`：按纯文本搜索笔记内容。
 - `vault_neighbor_notes`：查看指定笔记的出链和反链。
 
-这些工具只读取当前 vault 内的 `.md` 文件；编辑类工具会在后续按写入安全策略单独接入。
+当前也接入了第一版编辑工具：
+
+- `vault_create_note`：在 vault 内创建新的 Markdown 笔记，不会覆盖已有文件。
+- `vault_append_index_entry`：按写入策略自动追加低风险 index 条目。
+- `vault_propose_note_update`：为既有笔记生成替换内容提案，但不直接写入。
+
+编辑工具遵守安全边界：创建新文件和低风险 index 追加可以自动执行；修改既有正文、删除、移动或重命名笔记必须先提出方案并等待用户确认。

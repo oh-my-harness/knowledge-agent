@@ -16,10 +16,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::Mutex;
 
-use crate::vault_read_tools;
+use crate::vault_agent_tools;
 
 const DEFAULT_DEEPSEEK_MODEL: &str = "deepseek-v4-flash";
-const SYSTEM_PROMPT: &str = "你是 Knowledge Agent，一个本地 Obsidian 知识库研究助手。你可以使用工具读取、搜索和沿链接图浏览当前 vault。回答必须基于已读取到的内容；如果上下文不足，请先使用工具查找。请用中文简洁回答，并在引用本地知识时说明笔记路径。";
+const SYSTEM_PROMPT: &str = "你是 Knowledge Agent，一个本地 Obsidian 知识库研究助手。你可以使用工具读取、搜索、沿链接图浏览当前 vault，也可以在安全边界内协助编辑。回答必须基于已读取到的内容；如果上下文不足，请先使用工具查找。可以创建新的 Markdown 笔记，可以按写入策略追加低风险 index 条目；修改既有笔记正文、删除、移动或重命名笔记前必须先提出变更方案并等待用户确认。请用中文简洁回答，并在引用本地知识时说明笔记路径。";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AskRequest {
@@ -209,7 +209,7 @@ impl DeepSeekAskRunner {
     fn tools(&self) -> Vec<Arc<dyn Tool>> {
         self.vault_root
             .as_ref()
-            .map(|vault_root| vault_read_tools(vault_root.clone()))
+            .map(|vault_root| vault_agent_tools(vault_root.clone()))
             .unwrap_or_default()
     }
 

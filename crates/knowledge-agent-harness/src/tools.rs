@@ -4,10 +4,15 @@ use std::{
 };
 
 use futures::future::BoxFuture;
-use knowledge_agent_core::vault::{graph::build_link_graph, scanner::scan_vault};
+use knowledge_agent_core::vault::{
+    graph::build_link_graph,
+    policy::{VaultWriteOperation, VaultWritePolicy, WriteDecision},
+    scanner::scan_vault,
+};
 use llm_harness::prelude::{ContentBlock, Tool, ToolContext, ToolError, ToolResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tokio::io::AsyncWriteExt;
 
 const MAX_NOTE_CHARS: usize = 24_000;
 const MAX_SEARCH_RESULTS: usize = 20;
@@ -21,6 +26,22 @@ pub fn vault_read_tools(vault_root: impl Into<PathBuf>) -> Vec<Arc<dyn Tool>> {
         Arc::new(SearchNotesTool::new(vault_root.clone())),
         Arc::new(NeighborNotesTool::new(vault_root)),
     ]
+}
+
+pub fn vault_edit_tools(vault_root: impl Into<PathBuf>) -> Vec<Arc<dyn Tool>> {
+    let vault_root = Arc::new(vault_root.into());
+    vec![
+        Arc::new(CreateNoteTool::new(vault_root.clone())),
+        Arc::new(AppendIndexEntryTool::new(vault_root.clone())),
+        Arc::new(ProposeNoteUpdateTool::new(vault_root)),
+    ]
+}
+
+pub fn vault_agent_tools(vault_root: impl Into<PathBuf>) -> Vec<Arc<dyn Tool>> {
+    let vault_root = vault_root.into();
+    let mut tools = vault_read_tools(vault_root.clone());
+    tools.extend(vault_edit_tools(vault_root));
+    tools
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -297,6 +318,297 @@ struct NeighborNotesTool {
     schema: Value,
 }
 
+#[derive(Debug, Deserialize)]
+struct CreateNoteArgs {
+    path: String,
+    content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct CreateNoteResult {
+    path: String,
+    written: bool,
+}
+
+struct CreateNoteTool {
+    vault_root: Arc<PathBuf>,
+    schema: Value,
+}
+
+impl CreateNoteTool {
+    fn new(vault_root: Arc<PathBuf>) -> Self {
+        Self {
+            vault_root,
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative Markdown path for the new note. Must end with .md and must not already exist."
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Full Markdown content to write into the new note."
+                    }
+                },
+                "required": ["path", "content"],
+                "additionalProperties": false
+            }),
+        }
+    }
+}
+
+impl Tool for CreateNoteTool {
+    fn name(&self) -> &str {
+        "vault_create_note"
+    }
+
+    fn label(&self) -> &str {
+        "Create note"
+    }
+
+    fn description(&self) -> &str {
+        "Create a new Markdown note inside the current Obsidian vault. It never overwrites existing files."
+    }
+
+    fn parameters_schema(&self) -> &Value {
+        &self.schema
+    }
+
+    fn execute<'a>(
+        &'a self,
+        args: Value,
+        _ctx: &'a ToolContext,
+    ) -> BoxFuture<'a, Result<ToolResult, ToolError>> {
+        Box::pin(async move {
+            let args: CreateNoteArgs = serde_json::from_value(args)
+                .map_err(|err| ToolError::InvalidArguments(err.to_string()))?;
+            let normalized = normalize_relative_path(&args.path);
+            let path = resolve_new_markdown_path(&self.vault_root, &normalized)?;
+            if let Some(parent) = path.parent() {
+                tokio::fs::create_dir_all(parent)
+                    .await
+                    .map_err(|err| ToolError::Execution(err.to_string()))?;
+            }
+            tokio::fs::write(&path, args.content)
+                .await
+                .map_err(|err| ToolError::Execution(err.to_string()))?;
+
+            ok_json(CreateNoteResult {
+                path: normalized,
+                written: true,
+            })
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct AppendIndexEntryArgs {
+    index_path: String,
+    target_path: String,
+    title: String,
+    summary: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct AppendIndexEntryResult {
+    index_path: String,
+    target_path: String,
+    written: bool,
+    decision: String,
+}
+
+struct AppendIndexEntryTool {
+    vault_root: Arc<PathBuf>,
+    schema: Value,
+}
+
+impl AppendIndexEntryTool {
+    fn new(vault_root: Arc<PathBuf>) -> Self {
+        Self {
+            vault_root,
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "index_path": {
+                        "type": "string",
+                        "description": "Relative path of the Markdown index file to update."
+                    },
+                    "target_path": {
+                        "type": "string",
+                        "description": "Relative path of the note that should be linked from the index."
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Index entry heading."
+                    },
+                    "summary": {
+                        "type": "string",
+                        "description": "Optional one-line summary."
+                    }
+                },
+                "required": ["index_path", "target_path", "title"],
+                "additionalProperties": false
+            }),
+        }
+    }
+}
+
+impl Tool for AppendIndexEntryTool {
+    fn name(&self) -> &str {
+        "vault_append_index_entry"
+    }
+
+    fn label(&self) -> &str {
+        "Append index entry"
+    }
+
+    fn description(&self) -> &str {
+        "Append a Markdown index entry. This is a low-risk automatic write according to the vault write policy."
+    }
+
+    fn parameters_schema(&self) -> &Value {
+        &self.schema
+    }
+
+    fn execute<'a>(
+        &'a self,
+        args: Value,
+        _ctx: &'a ToolContext,
+    ) -> BoxFuture<'a, Result<ToolResult, ToolError>> {
+        Box::pin(async move {
+            let args: AppendIndexEntryArgs = serde_json::from_value(args)
+                .map_err(|err| ToolError::InvalidArguments(err.to_string()))?;
+            let index_path = normalize_relative_path(&args.index_path);
+            let target_path = normalize_relative_path(&args.target_path);
+            let decision = VaultWritePolicy.decide(&VaultWriteOperation::AddIndexEntry {
+                index_path: index_path.clone(),
+                target_path: target_path.clone(),
+            });
+            if decision != WriteDecision::AllowAutomatic {
+                return Err(ToolError::Execution(
+                    "write policy requires confirmation for this index update".to_string(),
+                ));
+            }
+
+            let full_index_path = resolve_markdown_path(&self.vault_root, &index_path)?;
+            let mut entry = format!(
+                "\n## {}\n\n- link: [[{}]]\n",
+                args.title.trim(),
+                target_path
+            );
+            if let Some(summary) = args.summary.filter(|value| !value.trim().is_empty()) {
+                entry.push_str(&format!("- summary: {}\n", summary.trim()));
+            }
+            tokio::fs::OpenOptions::new()
+                .append(true)
+                .open(&full_index_path)
+                .await
+                .map_err(|err| ToolError::Execution(err.to_string()))?
+                .write_all(entry.as_bytes())
+                .await
+                .map_err(|err| ToolError::Execution(err.to_string()))?;
+
+            ok_json(AppendIndexEntryResult {
+                index_path,
+                target_path,
+                written: true,
+                decision: "allow_automatic".to_string(),
+            })
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ProposeNoteUpdateArgs {
+    path: String,
+    replacement_content: String,
+    reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct ProposeNoteUpdateResult {
+    path: String,
+    written: bool,
+    requires_confirmation: bool,
+    reason: Option<String>,
+    replacement_content: String,
+}
+
+struct ProposeNoteUpdateTool {
+    vault_root: Arc<PathBuf>,
+    schema: Value,
+}
+
+impl ProposeNoteUpdateTool {
+    fn new(vault_root: Arc<PathBuf>) -> Self {
+        Self {
+            vault_root,
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path of the existing Markdown note."
+                    },
+                    "replacement_content": {
+                        "type": "string",
+                        "description": "Full replacement Markdown content proposed for the note."
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Short reason for the proposed edit."
+                    }
+                },
+                "required": ["path", "replacement_content"],
+                "additionalProperties": false
+            }),
+        }
+    }
+}
+
+impl Tool for ProposeNoteUpdateTool {
+    fn name(&self) -> &str {
+        "vault_propose_note_update"
+    }
+
+    fn label(&self) -> &str {
+        "Propose note update"
+    }
+
+    fn description(&self) -> &str {
+        "Prepare a replacement for an existing note without writing it. Existing note body edits require user confirmation."
+    }
+
+    fn parameters_schema(&self) -> &Value {
+        &self.schema
+    }
+
+    fn execute<'a>(
+        &'a self,
+        args: Value,
+        _ctx: &'a ToolContext,
+    ) -> BoxFuture<'a, Result<ToolResult, ToolError>> {
+        Box::pin(async move {
+            let args: ProposeNoteUpdateArgs = serde_json::from_value(args)
+                .map_err(|err| ToolError::InvalidArguments(err.to_string()))?;
+            let normalized = normalize_relative_path(&args.path);
+            let _path = resolve_markdown_path(&self.vault_root, &normalized)?;
+            let decision = VaultWritePolicy.decide(&VaultWriteOperation::ModifyBodyMeaning {
+                path: normalized.clone(),
+            });
+
+            ok_json(ProposeNoteUpdateResult {
+                path: normalized,
+                written: false,
+                requires_confirmation: decision == WriteDecision::RequireConfirmation,
+                reason: args.reason,
+                replacement_content: args.replacement_content,
+            })
+        })
+    }
+}
+
 impl NeighborNotesTool {
     fn new(vault_root: Arc<PathBuf>) -> Self {
         Self {
@@ -418,6 +730,35 @@ fn resolve_markdown_path(vault_root: &Path, relative_path: &str) -> Result<PathB
     if !full_path.exists() {
         return Err(ToolError::Execution(format!(
             "note not found: {normalized}"
+        )));
+    }
+
+    Ok(full_path)
+}
+
+fn resolve_new_markdown_path(vault_root: &Path, relative_path: &str) -> Result<PathBuf, ToolError> {
+    let normalized = normalize_relative_path(relative_path);
+    if !normalized.ends_with(".md") {
+        return Err(ToolError::InvalidArguments(
+            "path must point to a Markdown .md file".to_string(),
+        ));
+    }
+
+    let path = Path::new(&normalized);
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::Prefix(_)))
+    {
+        return Err(ToolError::InvalidArguments(
+            "path must stay inside the vault".to_string(),
+        ));
+    }
+
+    let full_path = vault_root.join(path);
+    if full_path.exists() {
+        return Err(ToolError::Execution(format!(
+            "note already exists: {normalized}"
         )));
     }
 

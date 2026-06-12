@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use knowledge_agent_harness::{
     AskError, AskRequest, AskRunner, DeepSeekAskRunner, FakeAskRunner, HarnessAskRunner,
-    UnavailableAskRunner, vault_read_tools,
+    UnavailableAskRunner, vault_agent_tools, vault_read_tools,
 };
 use llm_harness::prelude::{AgentMessage, ContentBlock};
 use llm_harness_loop::{
@@ -183,4 +183,37 @@ async fn harness_runner_executes_vault_read_tool() {
         tool_text.is_some_and(|text| text.contains("agent-harness.md")),
         "expected vault_read_note tool result in context"
     );
+}
+
+#[tokio::test]
+async fn harness_runner_executes_vault_create_note_tool() {
+    let tmp = TempDir::new().unwrap();
+    let client = Arc::new(MockLlmClient::new(vec![
+        MockResponse::tool_use(
+            "tool-1",
+            "vault_create_note",
+            r##"{"path":"docs/research/new-note.md","content":"# New Note\n\nhello"}"##,
+        ),
+        MockResponse::text("created"),
+    ])) as Arc<dyn LlmClient>;
+    let runner = HarnessAskRunner::new_in_memory_with_tools(
+        client,
+        "test-model".to_string(),
+        vault_agent_tools(tmp.path()),
+    )
+    .await;
+
+    let response = runner
+        .ask(AskRequest {
+            message: "create a note".to_string(),
+            session_id: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(response.answer, "created");
+    let written = tokio::fs::read_to_string(tmp.path().join("docs/research/new-note.md"))
+        .await
+        .unwrap();
+    assert_eq!(written, "# New Note\n\nhello");
 }
