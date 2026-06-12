@@ -57,6 +57,9 @@ export function SettingsPage() {
     }
   }
 
+  const apiKeyStatus = settings.llm.deepseek_api_key?.trim() ? "已配置" : "未配置";
+  const webSearchStatus = settings.web_search.enabled ? "已启用" : "未启用";
+
   return (
     <section className="page settings-page">
       <header className="page-header">
@@ -68,6 +71,32 @@ export function SettingsPage() {
         <p className="muted">加载设置中</p>
       ) : (
         <form className="settings-form" onSubmit={handleSubmit}>
+          <section className="settings-section">
+            <h3>当前配置</h3>
+            <dl className="settings-summary">
+              <div>
+                <dt>模型 Provider</dt>
+                <dd>{settings.llm.provider}</dd>
+              </div>
+              <div>
+                <dt>模型名</dt>
+                <dd>{settings.llm.deepseek_model || "未设置"}</dd>
+              </div>
+              <div>
+                <dt>DeepSeek API Key</dt>
+                <dd>{apiKeyStatus}</dd>
+              </div>
+              <div>
+                <dt>网页搜索</dt>
+                <dd>{webSearchStatus}</dd>
+              </div>
+              <div>
+                <dt>搜索 Provider</dt>
+                <dd>{settings.web_search.provider}</dd>
+              </div>
+            </dl>
+          </section>
+
           <section className="settings-section">
             <h3>模型</h3>
             <label className="field">
