@@ -10,7 +10,7 @@ Knowledge Agent 是一个本地运行的研究助手和 Obsidian vault 维护工
 knowledge-agent serve .
 ```
 
-如果当前目录存在 `web/dist/index.html`，服务会自动加载 Web UI。也可以显式指定前端静态文件目录：
+如果当前目录或可执行文件所在目录存在 `web/dist/index.html`，服务会自动加载 Web UI。也可以显式指定前端静态文件目录：
 
 ```powershell
 knowledge-agent serve . --web-dir .\web\dist
@@ -83,13 +83,14 @@ Windows 下可以使用：
 
 ```text
 dist/knowledge-agent/
+dist/knowledge-agent.zip
 ```
 
 运行打包产物：
 
 ```powershell
 cd dist\knowledge-agent
-.\knowledge-agent.exe serve <你的 Obsidian vault 路径> --web-dir .\web\dist
+.\knowledge-agent.exe serve <你的 Obsidian vault 路径>
 ```
 
 ## LLM 配置

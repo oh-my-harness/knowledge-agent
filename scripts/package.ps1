@@ -6,6 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $packageRoot = Join-Path $repoRoot $OutputDir
+$archivePath = "$packageRoot.zip"
 $webDist = Join-Path $repoRoot "web\dist"
 $releaseExe = Join-Path $repoRoot "target\release\knowledge-agent.exe"
 
@@ -25,8 +26,14 @@ try {
     Copy-Item -LiteralPath $webDist -Destination (Join-Path $packageRoot "web\dist") -Recurse
     Copy-Item -LiteralPath (Join-Path $repoRoot "README.md") -Destination (Join-Path $packageRoot "README.md")
 
+    if (Test-Path $archivePath) {
+        Remove-Item -LiteralPath $archivePath -Force
+    }
+    Compress-Archive -LiteralPath $packageRoot -DestinationPath $archivePath
+
     Write-Host "Package written to $packageRoot"
-    Write-Host "Run: .\knowledge-agent.exe serve <obsidian-vault> --web-dir .\web\dist"
+    Write-Host "Archive written to $archivePath"
+    Write-Host "Run: .\knowledge-agent.exe serve <obsidian-vault>"
 }
 finally {
     Pop-Location
