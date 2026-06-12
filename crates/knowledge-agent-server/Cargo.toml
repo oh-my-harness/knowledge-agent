@@ -7,6 +7,7 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 axum.workspace = true
+futures.workspace = true
 knowledge-agent-core = { path = "../knowledge-agent-core" }
 knowledge-agent-harness = { path = "../knowledge-agent-harness" }
 serde.workspace = true

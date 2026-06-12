@@ -67,3 +67,9 @@ export interface AskResponse {
   sources: AskSource[];
   requires_followup: boolean;
 }
+
+export interface AskActivityEvent {
+  kind: string;
+  label: string;
+  detail: string | null;
+}

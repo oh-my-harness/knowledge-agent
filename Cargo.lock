@@ -945,6 +945,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "futures",
  "knowledge-agent-core",
  "knowledge-agent-harness",
  "serde",

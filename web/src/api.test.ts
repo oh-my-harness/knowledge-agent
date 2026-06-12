@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  askEventsUrl,
   askVault,
   createAskSession,
   getAskSessionMessages,
@@ -88,6 +89,10 @@ describe("api client", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ message: "什么是 Agent Harness？", session_id: "research", mode: "vault" })
     });
+  });
+
+  it("builds ask event stream urls", () => {
+    expect(askEventsUrl("research/session")).toBe("/api/ask/events?session_id=research%2Fsession");
   });
 
   it("manages ask sessions", async () => {

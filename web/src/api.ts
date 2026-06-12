@@ -51,3 +51,7 @@ export function askVault(message: string, sessionId = "default"): Promise<AskRes
     body: JSON.stringify({ message, session_id: sessionId, mode: "vault" })
   });
 }
+
+export function askEventsUrl(sessionId = "default"): string {
+  return `/api/ask/events?session_id=${encodeURIComponent(sessionId)}`;
+}

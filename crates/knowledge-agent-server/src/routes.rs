@@ -1,10 +1,12 @@
 use crate::state::AppState;
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
+    response::sse::{Event, KeepAlive, Sse},
     routing::{get, post},
 };
+use futures::{Stream, stream};
 use knowledge_agent_core::{
     maintenance::checks::run_maintenance_scan,
     settings::{LocalSettings, load_local_settings, save_local_settings},
@@ -12,6 +14,8 @@ use knowledge_agent_core::{
 };
 use knowledge_agent_harness as harness;
 use serde::{Deserialize, Serialize};
+use std::{convert::Infallible, sync::Arc, time::Duration};
+use tokio::sync::broadcast;
 
 #[derive(Debug, Serialize)]
 struct HealthResponse {
@@ -23,6 +27,11 @@ struct AskRequest {
     message: String,
     session_id: Option<String>,
     mode: AskMode,
+}
+
+#[derive(Debug, Deserialize)]
+struct AskEventsQuery {
+    session_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,6 +58,13 @@ struct AskSource {
     path: String,
 }
 
+#[derive(Debug, Serialize)]
+struct AskActivityEvent {
+    kind: &'static str,
+    label: String,
+    detail: Option<String>,
+}
+
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/api/health", get(health))
@@ -62,6 +78,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/ask/sessions/{session_id}/messages",
             get(ask_session_messages),
         )
+        .route("/api/ask/events", get(ask_events))
         .route("/api/ask", post(ask))
         .with_state(state)
 }
@@ -168,6 +185,167 @@ async fn ask_session_messages(
         .await
         .map(Json)
         .map_err(ask_error)
+}
+
+async fn ask_events(
+    State(state): State<AppState>,
+    Query(query): Query<AskEventsQuery>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, (StatusCode, String)> {
+    let session_id = query.session_id.unwrap_or_else(|| "default".to_string());
+    let receiver = state
+        .ask_runner
+        .subscribe_events(session_id)
+        .await
+        .map_err(ask_error)?;
+    let stream = stream::unfold(receiver, |mut receiver| async move {
+        loop {
+            match receiver.recv().await {
+                Ok(event) => {
+                    return Some((Ok(to_sse_event(&event)), receiver));
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(broadcast::error::RecvError::Closed) => return None,
+            }
+        }
+    });
+
+    Ok(Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .interval(Duration::from_secs(15))
+            .text("keep-alive"),
+    ))
+}
+
+fn to_sse_event(event: &Arc<harness::AgentHarnessEvent>) -> Event {
+    let payload = to_activity_event(event.as_ref());
+    Event::default()
+        .event("agent")
+        .json_data(payload)
+        .expect("activity event serializes")
+}
+
+fn to_activity_event(event: &harness::AgentHarnessEvent) -> AskActivityEvent {
+    match event {
+        harness::AgentHarnessEvent::Agent(agent_event) => to_agent_activity_event(agent_event),
+        harness::AgentHarnessEvent::ToolCallStart { tool_name, .. } => AskActivityEvent {
+            kind: "tool_call_start",
+            label: format!("准备使用工具：{}", tool_label(tool_name)),
+            detail: Some(tool_name.clone()),
+        },
+        harness::AgentHarnessEvent::ToolCallEnd {
+            tool_name, result, ..
+        } => AskActivityEvent {
+            kind: "tool_execution_end",
+            label: if result.is_error {
+                "工具执行失败".to_string()
+            } else {
+                "工具执行完成".to_string()
+            },
+            detail: Some(tool_name.clone()),
+        },
+        harness::AgentHarnessEvent::Settled => AskActivityEvent {
+            kind: "agent_end",
+            label: "完成".to_string(),
+            detail: None,
+        },
+        harness::AgentHarnessEvent::SavePoint { .. } => AskActivityEvent {
+            kind: "save_point",
+            label: "正在保存会话".to_string(),
+            detail: None,
+        },
+        harness::AgentHarnessEvent::PhaseChange { .. } => AskActivityEvent {
+            kind: "running",
+            label: "正在处理".to_string(),
+            detail: None,
+        },
+        _ => AskActivityEvent {
+            kind: "running",
+            label: "正在处理".to_string(),
+            detail: None,
+        },
+    }
+}
+
+fn to_agent_activity_event(event: &harness::AgentEvent) -> AskActivityEvent {
+    match event {
+        harness::AgentEvent::AgentStart { .. } => AskActivityEvent {
+            kind: "agent_start",
+            label: "开始处理".to_string(),
+            detail: None,
+        },
+        harness::AgentEvent::ThinkingDelta { .. } => AskActivityEvent {
+            kind: "thinking",
+            label: "正在思考".to_string(),
+            detail: None,
+        },
+        harness::AgentEvent::ToolCallStart { name, .. } => AskActivityEvent {
+            kind: "tool_call_start",
+            label: format!("准备使用工具：{}", tool_label(name)),
+            detail: Some(name.clone()),
+        },
+        harness::AgentEvent::ToolExecutionStart { tool_name, .. } => AskActivityEvent {
+            kind: "tool_execution_start",
+            label: format!("正在{}", tool_action(tool_name)),
+            detail: Some(tool_name.clone()),
+        },
+        harness::AgentEvent::ToolExecutionEnd { result, .. } => AskActivityEvent {
+            kind: "tool_execution_end",
+            label: if result.is_ok() {
+                "工具执行完成".to_string()
+            } else {
+                "工具执行失败".to_string()
+            },
+            detail: result.as_ref().err().map(|err| err.to_string()),
+        },
+        harness::AgentEvent::TextDelta { .. } | harness::AgentEvent::MessageUpdate { .. } => {
+            AskActivityEvent {
+                kind: "answering",
+                label: "正在生成回答".to_string(),
+                detail: None,
+            }
+        }
+        harness::AgentEvent::AgentEnd { .. } => AskActivityEvent {
+            kind: "agent_end",
+            label: "完成".to_string(),
+            detail: None,
+        },
+        harness::AgentEvent::Error(err) => AskActivityEvent {
+            kind: "error",
+            label: "处理失败".to_string(),
+            detail: Some(err.to_string()),
+        },
+        _ => AskActivityEvent {
+            kind: "running",
+            label: "正在处理".to_string(),
+            detail: None,
+        },
+    }
+}
+
+fn tool_label(name: &str) -> &str {
+    match name {
+        "vault_list_notes" => "列出笔记",
+        "vault_read_note" => "读取笔记",
+        "vault_search_notes" => "搜索笔记",
+        "vault_neighbor_notes" => "查看相邻节点",
+        "vault_create_note" => "新建笔记",
+        "vault_append_index_entry" => "维护索引",
+        "vault_propose_note_update" => "提出笔记修改",
+        _ => name,
+    }
+}
+
+fn tool_action(name: &str) -> &str {
+    match name {
+        "vault_list_notes" => "列出知识库笔记",
+        "vault_read_note" => "读取笔记",
+        "vault_search_notes" => "搜索知识库",
+        "vault_neighbor_notes" => "查看链接邻近节点",
+        "vault_create_note" => "新建笔记",
+        "vault_append_index_entry" => "维护索引",
+        "vault_propose_note_update" => "生成笔记修改提案",
+        _ => "执行工具",
+    }
 }
 
 fn internal_error(err: anyhow::Error) -> (StatusCode, String) {

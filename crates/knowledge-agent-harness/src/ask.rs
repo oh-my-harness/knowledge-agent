@@ -7,14 +7,14 @@ use std::{
 use async_trait::async_trait;
 use llm_adapter::deepseek;
 use llm_harness::prelude::{
-    AgentHarness, AgentHarnessOptions, AgentMessage, ContentBlock, ExecutionEnv, JsonlSessionRepo,
-    Session, SessionRepo, Tool, UnsupportedEnv,
+    AgentHarness, AgentHarnessEvent, AgentHarnessOptions, AgentMessage, ContentBlock, ExecutionEnv,
+    JsonlSessionRepo, Session, SessionRepo, Tool, UnsupportedEnv,
 };
 use llm_harness::session::{CreateSessionOptions, ListSessionOptions};
 use llm_harness_loop::LlmClient;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, broadcast};
 
 use crate::vault_agent_tools;
 
@@ -71,6 +71,10 @@ pub trait AskRunner: Send + Sync {
     async fn list_sessions(&self) -> Result<Vec<ChatSession>, AskError>;
     async fn create_session(&self, name: String) -> Result<ChatSession, AskError>;
     async fn session_messages(&self, session_id: String) -> Result<Vec<ChatMessage>, AskError>;
+    async fn subscribe_events(
+        &self,
+        session_id: String,
+    ) -> Result<broadcast::Receiver<Arc<AgentHarnessEvent>>, AskError>;
 }
 
 #[derive(Debug)]
@@ -109,6 +113,13 @@ impl AskRunner for FakeAskRunner {
     async fn session_messages(&self, _session_id: String) -> Result<Vec<ChatMessage>, AskError> {
         Ok(Vec::new())
     }
+
+    async fn subscribe_events(
+        &self,
+        _session_id: String,
+    ) -> Result<broadcast::Receiver<Arc<AgentHarnessEvent>>, AskError> {
+        Ok(empty_event_receiver())
+    }
 }
 
 pub struct UnavailableAskRunner {
@@ -142,6 +153,13 @@ impl AskRunner for UnavailableAskRunner {
     async fn session_messages(&self, _session_id: String) -> Result<Vec<ChatMessage>, AskError> {
         Ok(Vec::new())
     }
+
+    async fn subscribe_events(
+        &self,
+        _session_id: String,
+    ) -> Result<broadcast::Receiver<Arc<AgentHarnessEvent>>, AskError> {
+        Ok(empty_event_receiver())
+    }
 }
 
 pub struct DeepSeekAskRunner {
@@ -150,7 +168,7 @@ pub struct DeepSeekAskRunner {
     sessions_root: Option<PathBuf>,
     session_name: String,
     vault_root: Option<PathBuf>,
-    harnesses: Mutex<HashMap<String, HarnessAskRunner>>,
+    harnesses: Mutex<HashMap<String, Arc<HarnessAskRunner>>>,
 }
 
 impl DeepSeekAskRunner {
@@ -229,6 +247,20 @@ impl DeepSeekAskRunner {
             Ok(HarnessAskRunner::new_in_memory_with_tools(client, self.model.clone(), tools).await)
         }
     }
+
+    async fn harness_for_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Arc<HarnessAskRunner>, AskError> {
+        let mut harnesses = self.harnesses.lock().await;
+        if let Some(harness) = harnesses.get(session_id) {
+            return Ok(harness.clone());
+        }
+
+        let harness = Arc::new(self.build_harness(session_id).await?);
+        harnesses.insert(session_id.to_string(), harness.clone());
+        Ok(harness)
+    }
 }
 
 #[async_trait]
@@ -240,17 +272,8 @@ impl AskRunner for DeepSeekAskRunner {
             .map(normalize_session_id)
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| self.session_name.clone());
-        let mut harnesses = self.harnesses.lock().await;
-        if !harnesses.contains_key(&session_id) {
-            let harness = self.build_harness(&session_id).await?;
-            harnesses.insert(session_id.clone(), harness);
-        }
-
-        harnesses
-            .get(&session_id)
-            .expect("harness initialized before ask")
-            .ask(request)
-            .await
+        let harness = self.harness_for_session(&session_id).await?;
+        harness.ask(request).await
     }
 
     async fn list_sessions(&self) -> Result<Vec<ChatSession>, AskError> {
@@ -291,11 +314,7 @@ impl AskRunner for DeepSeekAskRunner {
             ));
         }
 
-        let mut harnesses = self.harnesses.lock().await;
-        if !harnesses.contains_key(&session_id) {
-            let harness = self.build_harness(&session_id).await?;
-            harnesses.insert(session_id.clone(), harness);
-        }
+        self.harness_for_session(&session_id).await?;
 
         Ok(ChatSession {
             id: session_id.clone(),
@@ -306,17 +325,24 @@ impl AskRunner for DeepSeekAskRunner {
 
     async fn session_messages(&self, session_id: String) -> Result<Vec<ChatMessage>, AskError> {
         let session_id = normalize_session_id(&session_id);
-        let mut harnesses = self.harnesses.lock().await;
-        if !harnesses.contains_key(&session_id) {
-            let harness = self.build_harness(&session_id).await?;
-            harnesses.insert(session_id.clone(), harness);
-        }
+        let harness = self.harness_for_session(&session_id).await?;
 
-        harnesses
-            .get(&session_id)
-            .expect("harness initialized before reading messages")
-            .conversation_messages()
-            .await
+        harness.conversation_messages().await
+    }
+
+    async fn subscribe_events(
+        &self,
+        session_id: String,
+    ) -> Result<broadcast::Receiver<Arc<AgentHarnessEvent>>, AskError> {
+        let session_id = normalize_session_id(&session_id);
+        let session_id = if session_id.is_empty() {
+            self.session_name.clone()
+        } else {
+            session_id
+        };
+        let harness = self.harness_for_session(&session_id).await?;
+
+        harness.subscribe_events().await
     }
 }
 
@@ -431,6 +457,13 @@ impl HarnessAskRunner {
         let messages = self.context_messages().await?;
         Ok(to_chat_messages(&messages))
     }
+
+    pub async fn subscribe_events(
+        &self,
+    ) -> Result<broadcast::Receiver<Arc<AgentHarnessEvent>>, AskError> {
+        let harness = self.harness.lock().await;
+        Ok(harness.subscribe())
+    }
 }
 
 #[async_trait]
@@ -476,6 +509,18 @@ impl AskRunner for HarnessAskRunner {
     async fn session_messages(&self, _session_id: String) -> Result<Vec<ChatMessage>, AskError> {
         self.conversation_messages().await
     }
+
+    async fn subscribe_events(
+        &self,
+        _session_id: String,
+    ) -> Result<broadcast::Receiver<Arc<AgentHarnessEvent>>, AskError> {
+        self.subscribe_events().await
+    }
+}
+
+fn empty_event_receiver() -> broadcast::Receiver<Arc<AgentHarnessEvent>> {
+    let (_sender, receiver) = broadcast::channel(1);
+    receiver
 }
 
 fn assistant_text(messages: &[AgentMessage]) -> String {

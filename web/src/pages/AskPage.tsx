@@ -2,8 +2,8 @@ import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
-import { askVault, createAskSession, getAskSessionMessages, listAskSessions } from "../api";
-import type { ChatMessage, ChatSession } from "../types";
+import { askEventsUrl, askVault, createAskSession, getAskSessionMessages, listAskSessions } from "../api";
+import type { AskActivityEvent, ChatMessage, ChatSession } from "../types";
 
 export function AskPage() {
   const [input, setInput] = useState("");
@@ -13,6 +13,7 @@ export function AskPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [agentActivity, setAgentActivity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId),
@@ -73,6 +74,26 @@ export function AskPage() {
     };
   }, [activeSessionId]);
 
+  useEffect(() => {
+    if (typeof EventSource === "undefined") {
+      return;
+    }
+
+    const events = new EventSource(askEventsUrl(activeSessionId));
+    events.addEventListener("agent", (event) => {
+      const activity = JSON.parse((event as MessageEvent).data) as AskActivityEvent;
+      if (activity.kind === "agent_end" || activity.kind === "error") {
+        setAgentActivity(null);
+        return;
+      }
+      setAgentActivity(activity.label);
+    });
+
+    return () => {
+      events.close();
+    };
+  }, [activeSessionId]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await sendMessage();
@@ -87,6 +108,7 @@ export function AskPage() {
     setMessages((current) => [...current, { role: "user", content: message }]);
     setInput("");
     setIsSending(true);
+    setAgentActivity("正在思考");
     setError(null);
 
     try {
@@ -101,6 +123,7 @@ export function AskPage() {
       setError(err instanceof Error ? err.message : "发送失败");
     } finally {
       setIsSending(false);
+      setAgentActivity(null);
     }
   }
 
@@ -188,7 +211,7 @@ export function AskPage() {
                 <span aria-hidden="true" />
                 <span aria-hidden="true" />
                 <span aria-hidden="true" />
-                <p>正在思考</p>
+                <p>{agentActivity ?? "正在思考"}</p>
               </div>
             </article>
           )}
