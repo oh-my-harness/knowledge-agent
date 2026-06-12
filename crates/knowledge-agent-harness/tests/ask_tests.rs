@@ -3,7 +3,7 @@ use std::sync::Arc;
 use knowledge_agent_core::vault::confirmation::list_confirmations;
 use knowledge_agent_harness::{
     AskError, AskRequest, AskRunner, DeepSeekAskRunner, FakeAskRunner, HarnessAskRunner,
-    UnavailableAskRunner, vault_agent_tools, vault_read_tools,
+    UnavailableAskRunner, vault_agent_tools, vault_read_tools, web_fetch_tools, web_search_tools,
 };
 use llm_harness::prelude::{AgentMessage, ContentBlock};
 use llm_harness_loop::{
@@ -52,6 +52,42 @@ async fn unavailable_runner_returns_its_error() {
         .await;
 
     assert!(matches!(result, Err(AskError::MissingApiKey)));
+}
+
+#[test]
+fn tool_sets_include_ingestion_tools() {
+    let tmp = TempDir::new().unwrap();
+    let vault_tool_names = vault_agent_tools(tmp.path())
+        .into_iter()
+        .map(|tool| tool.name().to_string())
+        .collect::<Vec<_>>();
+    assert!(
+        vault_tool_names
+            .iter()
+            .any(|name| name == "vault_find_related_notes")
+    );
+    assert!(
+        vault_tool_names
+            .iter()
+            .any(|name| name == "vault_list_pdf_assets")
+    );
+    assert!(
+        vault_tool_names
+            .iter()
+            .any(|name| name == "vault_read_pdf_text")
+    );
+
+    let fetch_tool_names = web_fetch_tools()
+        .into_iter()
+        .map(|tool| tool.name().to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(fetch_tool_names, vec!["web_fetch_page"]);
+
+    let search_tool_names = web_search_tools()
+        .into_iter()
+        .map(|tool| tool.name().to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(search_tool_names, vec!["web_search"]);
 }
 
 #[tokio::test]

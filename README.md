@@ -35,6 +35,7 @@ cargo run -p knowledge-agent-cli -- serve crates/knowledge-agent-core/tests/fixt
 
 - `GET /api/health`
 - `GET /api/vault/index`
+- `GET /api/vault/pdfs`
 - `POST /api/maintenance/scan`
 - `GET /api/confirmations`
 - `POST /api/confirmations/{id}/apply`
@@ -206,7 +207,17 @@ Web 聊天界面支持多个会话：
 - `vault_read_note`：读取指定 Markdown 笔记内容。
 - `vault_search_notes`：按纯文本搜索笔记内容。
 - `vault_neighbor_notes`：查看指定笔记的出链和反链。
+- `vault_find_related_notes`：根据网页或 PDF 提取文本查找相关笔记，用于生成资料卡时建立 wikilink。
+- `vault_list_pdf_assets`：列出 vault 内的 PDF 资源。
+- `vault_read_pdf_text`：提取文本型 PDF 的文字内容，用于总结和资料卡生成。
 - `web_search`：启用网页搜索后使用 DuckDuckGo 搜索公开网页，返回标题、链接和摘要。
+- `web_fetch_page`：读取用户给定网页 URL，提取标题、描述和正文文本。
+
+Web UI 提供“资料摄入”页面：
+
+- 网页链接：提交 URL 后，agent 会读取网页、总结内容、查找相关笔记，并生成 Obsidian 资料卡建议。
+- 本地 PDF：可输入或选择 vault 内 PDF 路径，agent 会提取 PDF 文本、总结内容、查找相关笔记，并生成资料卡建议。
+- 资料卡写入遵守编辑安全边界：新建资料卡可自动执行，修改既有笔记正文必须进入确认队列。
 
 当前也接入了第一版编辑工具：
 

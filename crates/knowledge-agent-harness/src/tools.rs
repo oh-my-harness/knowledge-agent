@@ -5,6 +5,7 @@ use std::{
 
 use futures::future::BoxFuture;
 use knowledge_agent_core::vault::{
+    assets::{PdfAsset, list_pdf_assets},
     confirmation::{CreateReplaceNoteConfirmation, create_replace_note_confirmation},
     graph::build_link_graph,
     policy::{VaultWriteOperation, VaultWritePolicy, WriteDecision},
@@ -18,6 +19,7 @@ use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
 
 const MAX_NOTE_CHARS: usize = 24_000;
+const MAX_SOURCE_CHARS: usize = 48_000;
 const MAX_SEARCH_RESULTS: usize = 20;
 const MAX_SNIPPET_CHARS: usize = 240;
 const MAX_WEB_SEARCH_RESULTS: usize = 8;
@@ -29,7 +31,10 @@ pub fn vault_read_tools(vault_root: impl Into<PathBuf>) -> Vec<Arc<dyn Tool>> {
         Arc::new(ListNotesTool::new(vault_root.clone())),
         Arc::new(ReadNoteTool::new(vault_root.clone())),
         Arc::new(SearchNotesTool::new(vault_root.clone())),
-        Arc::new(NeighborNotesTool::new(vault_root)),
+        Arc::new(NeighborNotesTool::new(vault_root.clone())),
+        Arc::new(FindRelatedNotesTool::new(vault_root.clone())),
+        Arc::new(ListPdfAssetsTool::new(vault_root.clone())),
+        Arc::new(ReadPdfTextTool::new(vault_root)),
     ]
 }
 
@@ -51,6 +56,10 @@ pub fn vault_agent_tools(vault_root: impl Into<PathBuf>) -> Vec<Arc<dyn Tool>> {
 
 pub fn web_search_tools() -> Vec<Arc<dyn Tool>> {
     vec![Arc::new(DuckDuckGoSearchTool::new())]
+}
+
+pub fn web_fetch_tools() -> Vec<Arc<dyn Tool>> {
+    vec![Arc::new(WebFetchPageTool::new())]
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -432,6 +441,384 @@ impl Tool for DuckDuckGoSearchTool {
             let results = parse_duckduckgo_html(&html, limit);
 
             ok_json(WebSearchResult { query, results })
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct WebFetchPageArgs {
+    url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WebFetchPageResult {
+    url: String,
+    title: Option<String>,
+    description: Option<String>,
+    text: String,
+    truncated: bool,
+}
+
+struct WebFetchPageTool {
+    schema: Value,
+    client: reqwest::Client,
+}
+
+impl WebFetchPageTool {
+    fn new() -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(WEB_SEARCH_TIMEOUT_SECS))
+            .user_agent("knowledge-agent/0.1 local research assistant")
+            .build()
+            .expect("reqwest client configuration is valid");
+        Self {
+            client,
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "要读取和总结的公开网页 URL，必须是 http 或 https。"
+                    }
+                },
+                "required": ["url"],
+                "additionalProperties": false
+            }),
+        }
+    }
+}
+
+impl Tool for WebFetchPageTool {
+    fn name(&self) -> &str {
+        "web_fetch_page"
+    }
+
+    fn label(&self) -> &str {
+        "读取网页"
+    }
+
+    fn description(&self) -> &str {
+        "读取指定网页并提取标题、描述和正文文本。用于用户给定链接后的阅读、总结和生成知识库资料卡。"
+    }
+
+    fn parameters_schema(&self) -> &Value {
+        &self.schema
+    }
+
+    fn execute<'a>(
+        &'a self,
+        args: Value,
+        _ctx: &'a ToolContext,
+    ) -> BoxFuture<'a, Result<ToolResult, ToolError>> {
+        Box::pin(async move {
+            let args: WebFetchPageArgs = serde_json::from_value(args)
+                .map_err(|err| ToolError::InvalidArguments(err.to_string()))?;
+            let url = Url::parse(args.url.trim())
+                .map_err(|err| ToolError::InvalidArguments(err.to_string()))?;
+            if !matches!(url.scheme(), "http" | "https") {
+                return Err(ToolError::InvalidArguments(
+                    "url must use http or https".to_string(),
+                ));
+            }
+
+            let html = self
+                .client
+                .get(url.clone())
+                .send()
+                .await
+                .map_err(|err| ToolError::Execution(err.to_string()))?
+                .error_for_status()
+                .map_err(|err| ToolError::Execution(err.to_string()))?
+                .text()
+                .await
+                .map_err(|err| ToolError::Execution(err.to_string()))?;
+            let page = extract_page_text(url.as_str(), &html);
+
+            ok_json(page)
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct FindRelatedNotesArgs {
+    text: String,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct FindRelatedNotesResult {
+    matches: Vec<RelatedNote>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct RelatedNote {
+    path: String,
+    title: Option<String>,
+    tags: Vec<String>,
+    score: usize,
+    reason: String,
+}
+
+struct FindRelatedNotesTool {
+    vault_root: Arc<PathBuf>,
+    schema: Value,
+}
+
+impl FindRelatedNotesTool {
+    fn new(vault_root: Arc<PathBuf>) -> Self {
+        Self {
+            vault_root,
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "从网页或 PDF 提取出的标题、摘要、关键词或正文片段。工具会据此在现有 Markdown 笔记中寻找相关知识。"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 20,
+                        "description": "最多返回多少篇相关笔记，默认 8，最大 20。"
+                    }
+                },
+                "required": ["text"],
+                "additionalProperties": false
+            }),
+        }
+    }
+}
+
+impl Tool for FindRelatedNotesTool {
+    fn name(&self) -> &str {
+        "vault_find_related_notes"
+    }
+
+    fn label(&self) -> &str {
+        "查找相关笔记"
+    }
+
+    fn description(&self) -> &str {
+        "根据资料文本在当前 Obsidian 知识库中查找相关 Markdown 笔记，用于生成资料卡时建立 wikilink 关联。"
+    }
+
+    fn parameters_schema(&self) -> &Value {
+        &self.schema
+    }
+
+    fn execute<'a>(
+        &'a self,
+        args: Value,
+        _ctx: &'a ToolContext,
+    ) -> BoxFuture<'a, Result<ToolResult, ToolError>> {
+        Box::pin(async move {
+            let args: FindRelatedNotesArgs = serde_json::from_value(args)
+                .map_err(|err| ToolError::InvalidArguments(err.to_string()))?;
+            let text = normalize_whitespace(&args.text);
+            if text.is_empty() {
+                return Err(ToolError::InvalidArguments(
+                    "text cannot be empty".to_string(),
+                ));
+            }
+
+            let limit = args.limit.unwrap_or(8).clamp(1, MAX_SEARCH_RESULTS);
+            let tokens = meaningful_tokens(&text);
+            let scan = scan_vault(&self.vault_root).map_err(to_tool_error)?;
+            let mut matches = Vec::new();
+
+            for note in scan.notes {
+                let path = resolve_markdown_path(&self.vault_root, &note.relative_path)?;
+                let content = tokio::fs::read_to_string(&path)
+                    .await
+                    .map_err(|err| ToolError::Execution(err.to_string()))?;
+                let haystack = format!(
+                    "{} {} {} {}",
+                    note.relative_path,
+                    note.title.clone().unwrap_or_default(),
+                    note.tags.join(" "),
+                    content
+                )
+                .to_lowercase();
+                let mut matched_tokens = Vec::new();
+                let mut score = 0;
+                for token in &tokens {
+                    if haystack.contains(token) {
+                        matched_tokens.push(token.clone());
+                        score += if note
+                            .title
+                            .as_deref()
+                            .is_some_and(|title| title.to_lowercase().contains(token))
+                        {
+                            4
+                        } else if note
+                            .tags
+                            .iter()
+                            .any(|tag| tag.to_lowercase().contains(token))
+                        {
+                            3
+                        } else if note.relative_path.to_lowercase().contains(token) {
+                            2
+                        } else {
+                            1
+                        };
+                    }
+                }
+
+                if score > 0 {
+                    matched_tokens.sort();
+                    matched_tokens.dedup();
+                    matches.push(RelatedNote {
+                        path: note.relative_path,
+                        title: note.title,
+                        tags: note.tags,
+                        score,
+                        reason: format!(
+                            "matched keywords: {}",
+                            matched_tokens
+                                .into_iter()
+                                .take(8)
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    });
+                }
+            }
+
+            matches.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.path.cmp(&b.path)));
+            matches.truncate(limit);
+
+            ok_json(FindRelatedNotesResult { matches })
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct ListPdfAssetsResult {
+    pdfs: Vec<PdfAsset>,
+}
+
+struct ListPdfAssetsTool {
+    vault_root: Arc<PathBuf>,
+    schema: Value,
+}
+
+impl ListPdfAssetsTool {
+    fn new(vault_root: Arc<PathBuf>) -> Self {
+        Self {
+            vault_root,
+            schema: json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
+        }
+    }
+}
+
+impl Tool for ListPdfAssetsTool {
+    fn name(&self) -> &str {
+        "vault_list_pdf_assets"
+    }
+
+    fn label(&self) -> &str {
+        "列出 PDF"
+    }
+
+    fn description(&self) -> &str {
+        "列出当前 Obsidian 知识库中的 PDF 资源文件，优先用于发现 assets/papers 和 assets/references 下的原始资料。"
+    }
+
+    fn parameters_schema(&self) -> &Value {
+        &self.schema
+    }
+
+    fn execute<'a>(
+        &'a self,
+        _args: Value,
+        _ctx: &'a ToolContext,
+    ) -> BoxFuture<'a, Result<ToolResult, ToolError>> {
+        Box::pin(async move {
+            let pdfs = list_pdf_assets(&self.vault_root).map_err(to_tool_error)?;
+            ok_json(ListPdfAssetsResult { pdfs })
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ReadPdfTextArgs {
+    path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct ReadPdfTextResult {
+    path: String,
+    text: String,
+    truncated: bool,
+}
+
+struct ReadPdfTextTool {
+    vault_root: Arc<PathBuf>,
+    schema: Value,
+}
+
+impl ReadPdfTextTool {
+    fn new(vault_root: Arc<PathBuf>) -> Self {
+        Self {
+            vault_root,
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "相对知识库根目录的 PDF 文件路径，例如 assets/papers/rag/example.pdf"
+                    }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+            }),
+        }
+    }
+}
+
+impl Tool for ReadPdfTextTool {
+    fn name(&self) -> &str {
+        "vault_read_pdf_text"
+    }
+
+    fn label(&self) -> &str {
+        "读取 PDF 文本"
+    }
+
+    fn description(&self) -> &str {
+        "提取知识库内文本型 PDF 的文字内容，用于总结原始 PDF 资料并生成 Markdown 资料卡。扫描版 PDF 可能无法提取有效文字。"
+    }
+
+    fn parameters_schema(&self) -> &Value {
+        &self.schema
+    }
+
+    fn execute<'a>(
+        &'a self,
+        args: Value,
+        _ctx: &'a ToolContext,
+    ) -> BoxFuture<'a, Result<ToolResult, ToolError>> {
+        Box::pin(async move {
+            let args: ReadPdfTextArgs = serde_json::from_value(args)
+                .map_err(|err| ToolError::InvalidArguments(err.to_string()))?;
+            let normalized = normalize_relative_path(&args.path);
+            let path = resolve_pdf_path(&self.vault_root, &normalized)?;
+            let extracted = tokio::task::spawn_blocking(move || pdf_extract::extract_text(path))
+                .await
+                .map_err(|err| ToolError::Execution(err.to_string()))?
+                .map_err(|err| ToolError::Execution(err.to_string()))?;
+            let text = normalize_whitespace(&extracted);
+            let (text, truncated) = truncate_chars(text, MAX_SOURCE_CHARS);
+
+            ok_json(ReadPdfTextResult {
+                path: normalized,
+                text,
+                truncated,
+            })
         })
     }
 }
@@ -836,6 +1223,46 @@ fn ok_json(value: impl Serialize) -> Result<ToolResult, ToolError> {
     })
 }
 
+fn extract_page_text(url: &str, html: &str) -> WebFetchPageResult {
+    let document = Html::parse_document(html);
+    let title = document
+        .select(&selector("title"))
+        .next()
+        .map(|node| normalize_whitespace(&node.text().collect::<Vec<_>>().join(" ")))
+        .filter(|value| !value.is_empty());
+    let description = document
+        .select(&selector(r#"meta[name="description"]"#))
+        .next()
+        .and_then(|node| node.value().attr("content"))
+        .map(normalize_whitespace)
+        .filter(|value| !value.is_empty());
+
+    let content_selector = selector("article, main, body");
+    let mut chunks = Vec::new();
+    for node in document.select(&content_selector) {
+        let text = normalize_whitespace(&node.text().collect::<Vec<_>>().join(" "));
+        if text.chars().count() > 80 {
+            chunks.push(text);
+        }
+    }
+
+    let text = chunks
+        .into_iter()
+        .max_by_key(|chunk| chunk.chars().count())
+        .unwrap_or_else(|| {
+            normalize_whitespace(&document.root_element().text().collect::<Vec<_>>().join(" "))
+        });
+    let (text, truncated) = truncate_chars(text, MAX_SOURCE_CHARS);
+
+    WebFetchPageResult {
+        url: url.to_string(),
+        title,
+        description,
+        text,
+        truncated,
+    }
+}
+
 fn parse_duckduckgo_html(html: &str, limit: usize) -> Vec<WebSearchItem> {
     let document = Html::parse_document(html);
     let result_selector = selector(".result");
@@ -921,6 +1348,27 @@ fn selector(value: &str) -> Selector {
     Selector::parse(value).expect("static CSS selector is valid")
 }
 
+fn meaningful_tokens(text: &str) -> Vec<String> {
+    let mut tokens = text
+        .split(|ch: char| !ch.is_alphanumeric())
+        .map(str::trim)
+        .filter(|token| token.chars().count() >= 3)
+        .map(str::to_lowercase)
+        .filter(|token| !COMMON_TOKENS.contains(&token.as_str()))
+        .take(256)
+        .collect::<Vec<_>>();
+    tokens.sort();
+    tokens.dedup();
+    tokens
+}
+
+const COMMON_TOKENS: &[&str] = &[
+    "the", "and", "for", "with", "from", "this", "that", "you", "are", "was", "were", "can",
+    "will", "your", "about", "into", "using", "use", "used", "not", "but", "all", "one", "two",
+    "more", "when", "what", "which", "their", "there", "they", "them", "these", "those", "一个",
+    "以及", "可以", "通过", "进行", "当前", "相关", "知识", "内容", "这个", "需要", "如果",
+];
+
 fn resolve_markdown_path(vault_root: &Path, relative_path: &str) -> Result<PathBuf, ToolError> {
     let normalized = normalize_relative_path(relative_path);
     if !normalized.ends_with(".md") {
@@ -974,6 +1422,33 @@ fn resolve_new_markdown_path(vault_root: &Path, relative_path: &str) -> Result<P
         return Err(ToolError::Execution(format!(
             "note already exists: {normalized}"
         )));
+    }
+
+    Ok(full_path)
+}
+
+fn resolve_pdf_path(vault_root: &Path, relative_path: &str) -> Result<PathBuf, ToolError> {
+    let normalized = normalize_relative_path(relative_path);
+    if !normalized.to_lowercase().ends_with(".pdf") {
+        return Err(ToolError::InvalidArguments(
+            "path must point to a PDF .pdf file".to_string(),
+        ));
+    }
+
+    let path = Path::new(&normalized);
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::Prefix(_)))
+    {
+        return Err(ToolError::InvalidArguments(
+            "path must stay inside the vault".to_string(),
+        ));
+    }
+
+    let full_path = vault_root.join(path);
+    if !full_path.exists() {
+        return Err(ToolError::Execution(format!("pdf not found: {normalized}")));
     }
 
     Ok(full_path)

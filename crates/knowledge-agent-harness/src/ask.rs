@@ -16,10 +16,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::{Mutex, broadcast};
 
-use crate::{vault_agent_tools, web_search_tools};
+use crate::{vault_agent_tools, web_fetch_tools, web_search_tools};
 
 const DEFAULT_DEEPSEEK_MODEL: &str = "deepseek-v4-flash";
-const SYSTEM_PROMPT: &str = "你是 Knowledge Agent，一个本地 Obsidian 知识库研究助手。你可以使用工具读取、搜索、沿链接图浏览当前 vault，也可以在安全边界内协助编辑；如果提供了网页搜索工具，你可以搜索公开网页辅助研究。回答必须基于已读取到的内容；如果上下文不足，请先使用工具查找。网页搜索结果需要交叉比较，不能把单个搜索摘要当成最终事实。可以创建新的 Markdown 笔记，可以按写入策略追加低风险 index 条目；修改既有笔记正文、删除、移动或重命名笔记前必须先提出变更方案并等待用户确认。请用中文简洁回答，并在引用本地知识或网页结果时说明笔记路径或网页链接。";
+const SYSTEM_PROMPT: &str = "你是 Knowledge Agent，一个本地 Obsidian 知识库研究助手。你可以使用工具读取、搜索、沿链接图浏览当前 vault，也可以在安全边界内协助编辑；如果提供了网页工具，你可以搜索公开网页，也可以读取用户给定 URL。回答必须基于已读取到的内容；如果上下文不足，请先使用工具查找。网页搜索结果需要交叉比较，不能把单个搜索摘要当成最终事实。用户要求摄入网页链接时，应先读取网页正文，再查找相关笔记，最后总结并建议或创建符合 Obsidian 结构的资料卡；用户要求处理 PDF 时，应列出或读取 vault 内 PDF，提取文本，总结，并查找相关笔记建立 wikilink 关联。可以创建新的 Markdown 笔记，可以按写入策略追加低风险 index 条目；修改既有笔记正文、删除、移动或重命名笔记前必须先提出变更方案并等待用户确认。请用中文简洁回答，并在引用本地知识、PDF 或网页结果时说明笔记路径、PDF 路径或网页链接。";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AskRequest {
@@ -275,6 +275,7 @@ impl DeepSeekAskRunner {
             .as_ref()
             .map(|vault_root| vault_agent_tools(vault_root.clone()))
             .unwrap_or_default();
+        tools.extend(web_fetch_tools());
         if self.web_search_enabled {
             tools.extend(web_search_tools());
         }

@@ -1,3 +1,4 @@
+pub mod assets;
 pub mod confirmation;
 pub mod frontmatter;
 pub mod graph;

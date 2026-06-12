@@ -11,6 +11,7 @@ use knowledge_agent_core::{
     maintenance::checks::run_maintenance_scan,
     settings::{LocalSettings, load_local_settings, save_local_settings},
     vault::{
+        assets::list_pdf_assets,
         confirmation::{apply_confirmation, list_confirmations, reject_confirmation},
         scanner::scan_vault,
     },
@@ -91,6 +92,7 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/api/health", get(health))
         .route("/api/vault/index", get(vault_index))
+        .route("/api/vault/pdfs", get(vault_pdfs))
         .route("/api/maintenance/scan", post(maintenance_scan))
         .route("/api/confirmations", get(confirmations))
         .route(
@@ -130,6 +132,12 @@ type ApiResult<T> = Result<Json<T>, (StatusCode, String)>;
 
 async fn vault_index(State(state): State<AppState>) -> ApiResult<impl Serialize> {
     scan_vault(&state.vault_root)
+        .map(Json)
+        .map_err(internal_error)
+}
+
+async fn vault_pdfs(State(state): State<AppState>) -> ApiResult<impl Serialize> {
+    list_pdf_assets(&state.vault_root)
         .map(Json)
         .map_err(internal_error)
 }
@@ -450,7 +458,11 @@ fn tool_label(name: &str) -> &str {
         "vault_read_note" => "读取笔记",
         "vault_search_notes" => "搜索笔记",
         "vault_neighbor_notes" => "查看相邻节点",
+        "vault_find_related_notes" => "查找相关笔记",
+        "vault_list_pdf_assets" => "列出 PDF",
+        "vault_read_pdf_text" => "读取 PDF",
         "web_search" => "搜索网页",
+        "web_fetch_page" => "读取网页",
         "vault_create_note" => "新建笔记",
         "vault_append_index_entry" => "维护索引",
         "vault_propose_note_update" => "提出笔记修改",
@@ -464,7 +476,11 @@ fn tool_action(name: &str) -> &str {
         "vault_read_note" => "读取笔记",
         "vault_search_notes" => "搜索知识库",
         "vault_neighbor_notes" => "查看链接邻近节点",
+        "vault_find_related_notes" => "查找相关知识",
+        "vault_list_pdf_assets" => "列出知识库 PDF",
+        "vault_read_pdf_text" => "读取 PDF 文本",
         "web_search" => "搜索网页",
+        "web_fetch_page" => "读取网页正文",
         "vault_create_note" => "新建笔记",
         "vault_append_index_entry" => "维护索引",
         "vault_propose_note_update" => "生成笔记修改提案",
