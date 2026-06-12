@@ -180,19 +180,6 @@ button {
   color: #667085;
 }
 
-.ask-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.ask-header-actions span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .status-pill {
   width: fit-content;
   border-radius: 999px;
@@ -452,6 +439,23 @@ button {
   overflow-y: auto;
   border-right: 1px solid #d8dde6;
   padding-right: 14px;
+}
+
+.session-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.session-panel-restore {
+  align-self: start;
+  justify-self: start;
+  margin-bottom: 2px;
 }
 
 .session-form {

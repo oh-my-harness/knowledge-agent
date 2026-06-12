@@ -260,26 +260,23 @@ export function AskPage() {
     <section className="page ask-page">
       <header className="page-header">
         <h2>提问</h2>
-        <div className="ask-header-actions">
-          <span>{activeSession?.name ?? activeSessionId}</span>
-          <button
-            aria-label={isSessionPanelVisible ? "隐藏会话管理" : "显示会话管理"}
-            className="icon-button"
-            onClick={() => setIsSessionPanelVisible((visible) => !visible)}
-            title={isSessionPanelVisible ? "隐藏会话管理" : "显示会话管理"}
-            type="button"
-          >
-            {isSessionPanelVisible ? (
-              <ChevronsLeft aria-hidden="true" size={17} />
-            ) : (
-              <ChevronsRight aria-hidden="true" size={17} />
-            )}
-          </button>
-        </div>
+        <span>{activeSession?.name ?? activeSessionId}</span>
       </header>
       <div className={`chat-layout ${isSessionPanelVisible ? "" : "sessions-hidden"}`}>
         {isSessionPanelVisible && (
           <aside className="session-panel" aria-label="会话">
+            <div className="session-panel-header">
+              <span>会话</span>
+              <button
+                aria-label="隐藏会话管理"
+                className="icon-button"
+                onClick={() => setIsSessionPanelVisible(false)}
+                title="隐藏会话管理"
+                type="button"
+              >
+                <ChevronsLeft aria-hidden="true" size={17} />
+              </button>
+            </div>
             <form className="session-form" onSubmit={handleCreateSession}>
               <label className="sr-only" htmlFor="session-name">
                 新会话名称
@@ -336,6 +333,17 @@ export function AskPage() {
           onScroll={handleMessageListScroll}
           ref={messageListRef}
         >
+          {!isSessionPanelVisible && (
+            <button
+              aria-label="显示会话管理"
+              className="icon-button session-panel-restore"
+              onClick={() => setIsSessionPanelVisible(true)}
+              title="显示会话管理"
+              type="button"
+            >
+              <ChevronsRight aria-hidden="true" size={17} />
+            </button>
+          )}
           {isLoadingMessages ? (
             <p className="muted">加载消息中</p>
           ) : (
