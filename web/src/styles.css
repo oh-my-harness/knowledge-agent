@@ -24,6 +24,57 @@ button {
   font: inherit;
 }
 
+.sidebar,
+.content,
+.session-panel,
+.message-list,
+.markdown-body pre,
+.markdown-body table {
+  scrollbar-color: #b9c4d6 transparent;
+  scrollbar-width: thin;
+}
+
+.sidebar::-webkit-scrollbar,
+.content::-webkit-scrollbar,
+.session-panel::-webkit-scrollbar,
+.message-list::-webkit-scrollbar,
+.markdown-body pre::-webkit-scrollbar,
+.markdown-body table::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.content::-webkit-scrollbar-track,
+.session-panel::-webkit-scrollbar-track,
+.message-list::-webkit-scrollbar-track,
+.markdown-body pre::-webkit-scrollbar-track,
+.markdown-body table::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+.content::-webkit-scrollbar-thumb,
+.session-panel::-webkit-scrollbar-thumb,
+.message-list::-webkit-scrollbar-thumb,
+.markdown-body pre::-webkit-scrollbar-thumb,
+.markdown-body table::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #b9c4d6;
+  background-clip: content-box;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover,
+.content::-webkit-scrollbar-thumb:hover,
+.session-panel::-webkit-scrollbar-thumb:hover,
+.message-list::-webkit-scrollbar-thumb:hover,
+.markdown-body pre::-webkit-scrollbar-thumb:hover,
+.markdown-body table::-webkit-scrollbar-thumb:hover {
+  background: #8f9db2;
+  background-clip: content-box;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
