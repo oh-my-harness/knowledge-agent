@@ -1,4 +1,7 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
 import { askVault, createAskSession, getAskSessionMessages, listAskSessions } from "../api";
 import type { ChatMessage, ChatSession } from "../types";
 
@@ -174,7 +177,7 @@ export function AskPage() {
             messages.map((message, index) => (
               <article className={`message ${message.role}`} key={`${message.role}-${index}`}>
                 <span>{message.role === "user" ? "你" : "助手"}</span>
-                <p>{message.content}</p>
+                <MessageBody message={message} />
               </article>
             ))
           )}
@@ -199,4 +202,18 @@ export function AskPage() {
       </form>
     </section>
   );
+}
+
+function MessageBody({ message }: { message: ChatMessage }) {
+  if (message.role === "assistant") {
+    return (
+      <div className="markdown-body">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+          {message.content}
+        </ReactMarkdown>
+      </div>
+    );
+  }
+
+  return <p className="plain-message">{message.content}</p>;
 }

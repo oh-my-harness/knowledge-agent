@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -15,7 +15,7 @@ function notFound() {
   return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
 }
 
-function mockFetch() {
+function mockFetch(answer = "我已经收到你的问题。") {
   vi.stubGlobal(
     "fetch",
     vi.fn((input: RequestInfo | URL) => {
@@ -58,7 +58,7 @@ function mockFetch() {
       }
       if (url === "/api/ask") {
         return ok({
-          answer: "我已经收到你的问题。",
+          answer,
           sources: [],
           requires_followup: false
         });
@@ -134,6 +134,19 @@ describe("App", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ message: "什么是 Agent Harness？", session_id: "default", mode: "vault" })
     });
+  });
+
+  it("renders assistant markdown", async () => {
+    mockFetch("## 结论\n\n- 第一条\n- 第二条\n\n```ts\nconst ok = true;\n```");
+    render(<App />);
+
+    await userEvent.click(screen.getByRole("button", { name: "提问" }));
+    await userEvent.type(screen.getByLabelText("问题"), "给我 Markdown{enter}");
+
+    expect(await screen.findByRole("heading", { name: "结论", level: 2 })).toBeInTheDocument();
+    const list = screen.getByRole("list");
+    expect(within(list).getByText("第一条")).toBeInTheDocument();
+    expect(screen.getByText("const ok = true;")).toBeInTheDocument();
   });
 
   it("keeps a newline for Shift+Enter", async () => {
