@@ -11,6 +11,8 @@ use knowledge_agent_core::vault::{
     scanner::scan_vault,
 };
 use llm_harness::prelude::{ContentBlock, Tool, ToolContext, ToolError, ToolResult};
+use reqwest::Url;
+use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -18,6 +20,8 @@ use tokio::io::AsyncWriteExt;
 const MAX_NOTE_CHARS: usize = 24_000;
 const MAX_SEARCH_RESULTS: usize = 20;
 const MAX_SNIPPET_CHARS: usize = 240;
+const MAX_WEB_SEARCH_RESULTS: usize = 8;
+const WEB_SEARCH_TIMEOUT_SECS: u64 = 12;
 
 pub fn vault_read_tools(vault_root: impl Into<PathBuf>) -> Vec<Arc<dyn Tool>> {
     let vault_root = Arc::new(vault_root.into());
@@ -43,6 +47,10 @@ pub fn vault_agent_tools(vault_root: impl Into<PathBuf>) -> Vec<Arc<dyn Tool>> {
     let mut tools = vault_read_tools(vault_root.clone());
     tools.extend(vault_edit_tools(vault_root));
     tools
+}
+
+pub fn web_search_tools() -> Vec<Arc<dyn Tool>> {
+    vec![Arc::new(DuckDuckGoSearchTool::new())]
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -317,6 +325,115 @@ struct NeighborNotesResult {
 struct NeighborNotesTool {
     vault_root: Arc<PathBuf>,
     schema: Value,
+}
+
+#[derive(Debug, Deserialize)]
+struct WebSearchArgs {
+    query: String,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WebSearchResult {
+    query: String,
+    results: Vec<WebSearchItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WebSearchItem {
+    title: String,
+    url: String,
+    snippet: String,
+}
+
+struct DuckDuckGoSearchTool {
+    schema: Value,
+    client: reqwest::Client,
+}
+
+impl DuckDuckGoSearchTool {
+    fn new() -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(WEB_SEARCH_TIMEOUT_SECS))
+            .user_agent("knowledge-agent/0.1 local research assistant")
+            .build()
+            .expect("reqwest client configuration is valid");
+        Self {
+            client,
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "要搜索的网页关键词。应包含足够具体的主题、实体或时间范围。"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 8,
+                        "description": "最多返回多少条结果，默认 5，最大 8"
+                    }
+                },
+                "required": ["query"],
+                "additionalProperties": false
+            }),
+        }
+    }
+}
+
+impl Tool for DuckDuckGoSearchTool {
+    fn name(&self) -> &str {
+        "web_search"
+    }
+
+    fn label(&self) -> &str {
+        "搜索网页"
+    }
+
+    fn description(&self) -> &str {
+        "使用 DuckDuckGo 搜索公开网页，返回标题、链接和摘要。用于研究开放网络上的最新资料；如果需要可靠结论，应交叉比较多个结果。"
+    }
+
+    fn parameters_schema(&self) -> &Value {
+        &self.schema
+    }
+
+    fn execute<'a>(
+        &'a self,
+        args: Value,
+        _ctx: &'a ToolContext,
+    ) -> BoxFuture<'a, Result<ToolResult, ToolError>> {
+        Box::pin(async move {
+            let args: WebSearchArgs = serde_json::from_value(args)
+                .map_err(|err| ToolError::InvalidArguments(err.to_string()))?;
+            let query = args.query.trim().to_string();
+            if query.is_empty() {
+                return Err(ToolError::InvalidArguments(
+                    "query cannot be empty".to_string(),
+                ));
+            }
+
+            let limit = args.limit.unwrap_or(5).clamp(1, MAX_WEB_SEARCH_RESULTS);
+            let mut url = Url::parse("https://duckduckgo.com/html/")
+                .map_err(|err| ToolError::Execution(err.to_string()))?;
+            url.query_pairs_mut().append_pair("q", &query);
+
+            let html = self
+                .client
+                .get(url)
+                .send()
+                .await
+                .map_err(|err| ToolError::Execution(err.to_string()))?
+                .error_for_status()
+                .map_err(|err| ToolError::Execution(err.to_string()))?
+                .text()
+                .await
+                .map_err(|err| ToolError::Execution(err.to_string()))?;
+            let results = parse_duckduckgo_html(&html, limit);
+
+            ok_json(WebSearchResult { query, results })
+        })
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -719,6 +836,91 @@ fn ok_json(value: impl Serialize) -> Result<ToolResult, ToolError> {
     })
 }
 
+fn parse_duckduckgo_html(html: &str, limit: usize) -> Vec<WebSearchItem> {
+    let document = Html::parse_document(html);
+    let result_selector = selector(".result");
+    let title_selector = selector(".result__a");
+    let snippet_selector = selector(".result__snippet");
+    let fallback_snippet_selector = selector(".result__body");
+    let mut results = Vec::new();
+
+    for result in document.select(&result_selector) {
+        let Some(title_link) = result.select(&title_selector).next() else {
+            continue;
+        };
+        let title = normalize_whitespace(&title_link.text().collect::<Vec<_>>().join(" "));
+        let Some(href) = title_link.value().attr("href") else {
+            continue;
+        };
+        let url = clean_duckduckgo_url(href);
+        if title.is_empty() || url.is_empty() {
+            continue;
+        }
+
+        let snippet = result
+            .select(&snippet_selector)
+            .next()
+            .or_else(|| result.select(&fallback_snippet_selector).next())
+            .map(|node| normalize_whitespace(&node.text().collect::<Vec<_>>().join(" ")))
+            .unwrap_or_default();
+        let snippet = truncate_chars(snippet, MAX_SNIPPET_CHARS).0;
+
+        results.push(WebSearchItem {
+            title,
+            url,
+            snippet,
+        });
+        if results.len() >= limit {
+            break;
+        }
+    }
+
+    results
+}
+
+fn clean_duckduckgo_url(href: &str) -> String {
+    if let Ok(url) = Url::parse(href) {
+        if let Some(uddg) = url.query_pairs().find_map(|(key, value)| {
+            if key == "uddg" {
+                Some(value.into_owned())
+            } else {
+                None
+            }
+        }) {
+            return uddg;
+        }
+        return url.to_string();
+    }
+
+    let Ok(base) = Url::parse("https://duckduckgo.com") else {
+        return href.to_string();
+    };
+    match base.join(href) {
+        Ok(url) => {
+            if let Some(uddg) = url.query_pairs().find_map(|(key, value)| {
+                if key == "uddg" {
+                    Some(value.into_owned())
+                } else {
+                    None
+                }
+            }) {
+                uddg
+            } else {
+                url.to_string()
+            }
+        }
+        Err(_) => href.to_string(),
+    }
+}
+
+fn normalize_whitespace(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn selector(value: &str) -> Selector {
+    Selector::parse(value).expect("static CSS selector is valid")
+}
+
 fn resolve_markdown_path(vault_root: &Path, relative_path: &str) -> Result<PathBuf, ToolError> {
     let normalized = normalize_relative_path(relative_path);
     if !normalized.ends_with(".md") {
@@ -810,4 +1012,47 @@ fn note_identities(note: &knowledge_agent_core::vault::scanner::ScannedNote) -> 
 
 fn to_tool_error(err: anyhow::Error) -> ToolError {
     ToolError::Execution(err.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_duckduckgo_html_results() {
+        let html = r#"
+          <div class="result">
+            <a class="result__a" href="/l/?uddg=https%3A%2F%2Fexample.com%2Farticle%3Fx%3D1"> Example Article </a>
+            <a class="result__snippet"> A short result summary with extra spacing. </a>
+          </div>
+          <div class="result">
+            <a class="result__a" href="https://example.org/direct">Second Result</a>
+            <div class="result__snippet">Another summary</div>
+          </div>
+        "#;
+
+        let results = parse_duckduckgo_html(html, 5);
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].title, "Example Article");
+        assert_eq!(results[0].url, "https://example.com/article?x=1");
+        assert_eq!(
+            results[0].snippet,
+            "A short result summary with extra spacing."
+        );
+        assert_eq!(results[1].url, "https://example.org/direct");
+    }
+
+    #[test]
+    fn limits_duckduckgo_html_results() {
+        let html = r#"
+          <div class="result"><a class="result__a" href="https://one.example">One</a></div>
+          <div class="result"><a class="result__a" href="https://two.example">Two</a></div>
+        "#;
+
+        let results = parse_duckduckgo_html(html, 1);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "One");
+    }
 }

@@ -24,7 +24,7 @@ function localSettings() {
     },
     web_search: {
       enabled: false,
-      provider: "manual"
+      provider: "duckduckgo"
     }
   };
 }
@@ -304,11 +304,11 @@ describe("App", () => {
         },
         web_search: {
           enabled: true,
-          provider: "manual"
+          provider: "duckduckgo"
         }
       })
     });
-    expect(await screen.findByText("设置已保存。LLM 配置会在服务重启后用于新 runner。")).toBeInTheDocument();
+    expect(await screen.findByText("设置已保存。LLM 和网页搜索配置会在服务重启后用于新 runner。")).toBeInTheDocument();
   });
 
   it("asks a question with Enter and shows the assistant reply", async () => {

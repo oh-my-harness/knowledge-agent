@@ -41,7 +41,7 @@ const settings: LocalSettings = {
   },
   web_search: {
     enabled: false,
-    provider: "manual"
+    provider: "duckduckgo"
   }
 };
 
@@ -55,15 +55,15 @@ describe("api client", () => {
     mockFetch(settings);
     await expect(getLocalSettings()).resolves.toEqual(settings);
 
-    mockFetch({ ...settings, web_search: { enabled: true, provider: "manual" } });
-    await expect(saveLocalSettings({ ...settings, web_search: { enabled: true, provider: "manual" } })).resolves.toEqual({
+    mockFetch({ ...settings, web_search: { enabled: true, provider: "duckduckgo" } });
+    await expect(saveLocalSettings({ ...settings, web_search: { enabled: true, provider: "duckduckgo" } })).resolves.toEqual({
       ...settings,
-      web_search: { enabled: true, provider: "manual" }
+      web_search: { enabled: true, provider: "duckduckgo" }
     });
     expect(fetch).toHaveBeenCalledWith("/api/settings/local", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...settings, web_search: { enabled: true, provider: "manual" } })
+      body: JSON.stringify({ ...settings, web_search: { enabled: true, provider: "duckduckgo" } })
     });
   });
 

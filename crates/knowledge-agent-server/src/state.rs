@@ -13,6 +13,8 @@ impl AppState {
     pub fn new(vault_root: PathBuf) -> Self {
         let sessions_root = vault_root.join(".knowledge-agent").join("sessions");
         let local_settings = load_local_settings(&vault_root).unwrap_or_default();
+        let web_search_enabled =
+            local_settings.web_search.enabled && local_settings.web_search.provider == "duckduckgo";
         let ask_runner: Arc<dyn AskRunner> = match DeepSeekAskRunner::from_env_with_options(
             |name| {
                 std::env::var(name).ok().or_else(|| match name {
@@ -25,7 +27,7 @@ impl AppState {
             "default".to_string(),
             Some(vault_root.clone()),
         ) {
-            Ok(runner) => Arc::new(runner),
+            Ok(runner) => Arc::new(runner.with_web_search(web_search_enabled)),
             Err(err) => Arc::new(UnavailableAskRunner::new(err)),
         };
 

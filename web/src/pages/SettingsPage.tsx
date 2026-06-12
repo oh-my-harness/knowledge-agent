@@ -10,7 +10,7 @@ const defaultSettings: LocalSettings = {
   },
   web_search: {
     enabled: false,
-    provider: "manual"
+    provider: "duckduckgo"
   }
 };
 
@@ -49,7 +49,7 @@ export function SettingsPage() {
         web_search: settings.web_search
       });
       setSettings(saved);
-      setMessage("设置已保存。LLM 配置会在服务重启后用于新 runner。");
+      setMessage("设置已保存。LLM 和网页搜索配置会在服务重启后用于新 runner。");
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存设置失败");
     } finally {
@@ -125,7 +125,11 @@ export function SettingsPage() {
                 onChange={(event) =>
                   setSettings((current) => ({
                     ...current,
-                    web_search: { ...current.web_search, enabled: event.target.checked }
+                    web_search: {
+                      ...current.web_search,
+                      enabled: event.target.checked,
+                      provider: event.target.checked ? "duckduckgo" : current.web_search.provider
+                    }
                   }))
                 }
               />
@@ -143,7 +147,6 @@ export function SettingsPage() {
                   }))
                 }
               >
-                <option value="manual">暂未接入</option>
                 <option value="duckduckgo">DuckDuckGo</option>
               </select>
             </label>

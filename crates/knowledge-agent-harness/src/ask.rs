@@ -16,10 +16,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::{Mutex, broadcast};
 
-use crate::vault_agent_tools;
+use crate::{vault_agent_tools, web_search_tools};
 
 const DEFAULT_DEEPSEEK_MODEL: &str = "deepseek-v4-flash";
-const SYSTEM_PROMPT: &str = "你是 Knowledge Agent，一个本地 Obsidian 知识库研究助手。你可以使用工具读取、搜索、沿链接图浏览当前 vault，也可以在安全边界内协助编辑。回答必须基于已读取到的内容；如果上下文不足，请先使用工具查找。可以创建新的 Markdown 笔记，可以按写入策略追加低风险 index 条目；修改既有笔记正文、删除、移动或重命名笔记前必须先提出变更方案并等待用户确认。请用中文简洁回答，并在引用本地知识时说明笔记路径。";
+const SYSTEM_PROMPT: &str = "你是 Knowledge Agent，一个本地 Obsidian 知识库研究助手。你可以使用工具读取、搜索、沿链接图浏览当前 vault，也可以在安全边界内协助编辑；如果提供了网页搜索工具，你可以搜索公开网页辅助研究。回答必须基于已读取到的内容；如果上下文不足，请先使用工具查找。网页搜索结果需要交叉比较，不能把单个搜索摘要当成最终事实。可以创建新的 Markdown 笔记，可以按写入策略追加低风险 index 条目；修改既有笔记正文、删除、移动或重命名笔记前必须先提出变更方案并等待用户确认。请用中文简洁回答，并在引用本地知识或网页结果时说明笔记路径或网页链接。";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AskRequest {
@@ -206,6 +206,7 @@ pub struct DeepSeekAskRunner {
     sessions_root: Option<PathBuf>,
     session_name: String,
     vault_root: Option<PathBuf>,
+    web_search_enabled: bool,
     harnesses: Mutex<HashMap<String, Arc<HarnessAskRunner>>>,
 }
 
@@ -258,15 +259,26 @@ impl DeepSeekAskRunner {
             sessions_root,
             session_name,
             vault_root,
+            web_search_enabled: false,
             harnesses: Mutex::new(HashMap::new()),
         })
     }
 
+    pub fn with_web_search(mut self, enabled: bool) -> Self {
+        self.web_search_enabled = enabled;
+        self
+    }
+
     fn tools(&self) -> Vec<Arc<dyn Tool>> {
-        self.vault_root
+        let mut tools = self
+            .vault_root
             .as_ref()
             .map(|vault_root| vault_agent_tools(vault_root.clone()))
-            .unwrap_or_default()
+            .unwrap_or_default();
+        if self.web_search_enabled {
+            tools.extend(web_search_tools());
+        }
+        tools
     }
 
     async fn build_harness(&self, session_id: &str) -> Result<HarnessAskRunner, AskError> {

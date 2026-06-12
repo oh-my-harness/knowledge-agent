@@ -74,7 +74,7 @@ impl Default for LocalWebSearchSettings {
     fn default() -> Self {
         Self {
             enabled: false,
-            provider: "manual".to_string(),
+            provider: "duckduckgo".to_string(),
         }
     }
 }
