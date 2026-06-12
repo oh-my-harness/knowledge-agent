@@ -28,7 +28,7 @@ button {
 .content,
 .session-panel,
 .message-list,
-.confirmation-preview pre,
+.confirmation-diff,
 .markdown-body pre,
 .markdown-body table {
   scrollbar-color: #b9c4d6 transparent;
@@ -39,7 +39,7 @@ button {
 .content::-webkit-scrollbar,
 .session-panel::-webkit-scrollbar,
 .message-list::-webkit-scrollbar,
-.confirmation-preview pre::-webkit-scrollbar,
+.confirmation-diff::-webkit-scrollbar,
 .markdown-body pre::-webkit-scrollbar,
 .markdown-body table::-webkit-scrollbar {
   width: 8px;
@@ -50,7 +50,7 @@ button {
 .content::-webkit-scrollbar-track,
 .session-panel::-webkit-scrollbar-track,
 .message-list::-webkit-scrollbar-track,
-.confirmation-preview pre::-webkit-scrollbar-track,
+.confirmation-diff::-webkit-scrollbar-track,
 .markdown-body pre::-webkit-scrollbar-track,
 .markdown-body table::-webkit-scrollbar-track {
   background: transparent;
@@ -60,7 +60,7 @@ button {
 .content::-webkit-scrollbar-thumb,
 .session-panel::-webkit-scrollbar-thumb,
 .message-list::-webkit-scrollbar-thumb,
-.confirmation-preview pre::-webkit-scrollbar-thumb,
+.confirmation-diff::-webkit-scrollbar-thumb,
 .markdown-body pre::-webkit-scrollbar-thumb,
 .markdown-body table::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
@@ -73,7 +73,7 @@ button {
 .content::-webkit-scrollbar-thumb:hover,
 .session-panel::-webkit-scrollbar-thumb:hover,
 .message-list::-webkit-scrollbar-thumb:hover,
-.confirmation-preview pre::-webkit-scrollbar-thumb:hover,
+.confirmation-diff::-webkit-scrollbar-thumb:hover,
 .markdown-body pre::-webkit-scrollbar-thumb:hover,
 .markdown-body table::-webkit-scrollbar-thumb:hover {
   background: #8f9db2;
@@ -339,13 +339,7 @@ button {
   gap: 8px;
 }
 
-.confirmation-preview {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.confirmation-preview span {
+.confirmation-diff-wrap span {
   display: block;
   margin-bottom: 6px;
   color: #667085;
@@ -353,19 +347,69 @@ button {
   font-weight: 700;
 }
 
-.confirmation-preview pre {
+.confirmation-diff {
   max-height: 260px;
   overflow: auto;
   border: 1px solid #d8dde6;
   border-radius: 8px;
-  background: #f8fafc;
+  background: #ffffff;
   color: #243041;
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   font-size: 12px;
   line-height: 1.45;
-  margin: 0;
-  padding: 10px;
+}
+
+.diff-line {
+  display: grid;
+  grid-template-columns: 42px 42px 24px minmax(0, 1fr);
+  min-width: max-content;
+}
+
+.diff-line code {
+  min-width: 0;
+  padding: 2px 12px 2px 0;
+  color: inherit;
+  font-family: inherit;
   white-space: pre-wrap;
+}
+
+.diff-gutter,
+.diff-marker {
+  border-right: 1px solid rgba(36, 48, 65, 0.08);
+  color: #8a95a7;
+  text-align: right;
+  user-select: none;
+}
+
+.diff-gutter {
+  padding: 2px 8px;
+  background: #f8fafc;
+}
+
+.diff-marker {
+  padding: 2px 7px;
+}
+
+.diff-line.added {
+  background: #eaf7ef;
+  color: #155c32;
+}
+
+.diff-line.added .diff-marker {
+  color: #1f8f4d;
+}
+
+.diff-line.removed {
+  background: #fff0ef;
+  color: #8a1f17;
+}
+
+.diff-line.removed .diff-marker {
+  color: #c0352b;
+}
+
+.diff-line.unchanged {
+  background: #ffffff;
 }
 
 .ask-page {
@@ -785,7 +829,7 @@ button {
     flex-direction: column;
   }
 
-  .confirmation-preview {
-    grid-template-columns: 1fr;
+  .diff-line {
+    grid-template-columns: 34px 34px 22px minmax(0, 1fr);
   }
 }

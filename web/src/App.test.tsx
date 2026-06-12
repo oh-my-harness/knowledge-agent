@@ -274,6 +274,7 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "维护扫描" }));
 
     expect(await screen.findByText("docs/note.md")).toBeInTheDocument();
+    expect(screen.getByLabelText("修改预览 docs/note.md")).toBeInTheDocument();
     expect(screen.getByText("# Old")).toBeInTheDocument();
     expect(screen.getByText("# New")).toBeInTheDocument();
 
