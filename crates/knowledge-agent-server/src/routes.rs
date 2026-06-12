@@ -5,7 +5,11 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
-use knowledge_agent_core::{maintenance::checks::run_maintenance_scan, vault::scanner::scan_vault};
+use knowledge_agent_core::{
+    maintenance::checks::run_maintenance_scan,
+    settings::{LocalSettings, load_local_settings, save_local_settings},
+    vault::scanner::scan_vault,
+};
 use knowledge_agent_harness as harness;
 use serde::{Deserialize, Serialize};
 
@@ -50,6 +54,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/health", get(health))
         .route("/api/vault/index", get(vault_index))
         .route("/api/maintenance/scan", post(maintenance_scan))
+        .route("/api/settings/local", get(local_settings))
+        .route("/api/settings/local", post(save_settings))
         .route("/api/ask/sessions", get(list_ask_sessions))
         .route("/api/ask/sessions", post(create_ask_session))
         .route(
@@ -76,6 +82,20 @@ async fn maintenance_scan(State(state): State<AppState>) -> ApiResult<impl Seria
     run_maintenance_scan(&state.vault_root)
         .map(Json)
         .map_err(internal_error)
+}
+
+async fn local_settings(State(state): State<AppState>) -> ApiResult<LocalSettings> {
+    load_local_settings(&state.vault_root)
+        .map(Json)
+        .map_err(internal_error)
+}
+
+async fn save_settings(
+    State(state): State<AppState>,
+    Json(settings): Json<LocalSettings>,
+) -> ApiResult<LocalSettings> {
+    save_local_settings(&state.vault_root, &settings).map_err(internal_error)?;
+    Ok(Json(settings))
 }
 
 async fn ask(

@@ -1,7 +1,3 @@
-export interface HealthResponse {
-  status: "ok";
-}
-
 export interface WikiLink {
   target: string;
   alias: string | null;
@@ -30,6 +26,18 @@ export interface MaintenanceItem {
 
 export interface MaintenanceInbox {
   items: MaintenanceItem[];
+}
+
+export interface LocalSettings {
+  llm: {
+    provider: string;
+    deepseek_api_key: string | null;
+    deepseek_model: string;
+  };
+  web_search: {
+    enabled: boolean;
+    provider: string;
+  };
 }
 
 export interface AskRequest {

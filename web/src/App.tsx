@@ -1,15 +1,13 @@
-import { Activity, Database, MessageSquareText, ScanSearch, Settings } from "lucide-react";
+import { Database, MessageSquareText, ScanSearch, Settings } from "lucide-react";
 import { useState } from "react";
 import { AskPage } from "./pages/AskPage";
 import { MaintenancePage } from "./pages/MaintenancePage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { StatusPage } from "./pages/StatusPage";
 import { VaultPage } from "./pages/VaultPage";
 
-type Page = "status" | "ask" | "vault" | "maintenance" | "settings";
+type Page = "ask" | "vault" | "maintenance" | "settings";
 
-const navItems: Array<{ id: Page; label: string; icon: typeof Activity }> = [
-  { id: "status", label: "服务状态", icon: Activity },
+const navItems: Array<{ id: Page; label: string; icon: typeof MessageSquareText }> = [
   { id: "ask", label: "提问", icon: MessageSquareText },
   { id: "vault", label: "知识库", icon: Database },
   { id: "maintenance", label: "维护扫描", icon: ScanSearch },
@@ -17,7 +15,7 @@ const navItems: Array<{ id: Page; label: string; icon: typeof Activity }> = [
 ];
 
 export function App() {
-  const [page, setPage] = useState<Page>("status");
+  const [page, setPage] = useState<Page>("ask");
 
   return (
     <div className="app-shell">
@@ -47,7 +45,6 @@ export function App() {
         </nav>
       </aside>
       <main className="content">
-        {page === "status" && <StatusPage />}
         {page === "ask" && <AskPage />}
         {page === "vault" && <VaultPage />}
         {page === "maintenance" && <MaintenancePage />}

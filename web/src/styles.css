@@ -150,6 +150,10 @@ button {
   background: #fee4e2;
 }
 
+.success-text {
+  color: #166534;
+}
+
 .note-list,
 .inbox-list {
   display: grid;
@@ -448,6 +452,61 @@ button {
   border-radius: 8px;
   font: inherit;
   padding: 10px 12px;
+}
+
+.settings-page {
+  max-width: 760px;
+}
+
+.settings-form {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-section {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d8dde6;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 16px;
+}
+
+.settings-section h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field span,
+.check-field span {
+  color: #3d4654;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.field input,
+.field select {
+  min-height: 38px;
+  border: 1px solid #cbd2df;
+  border-radius: 8px;
+  font: inherit;
+  padding: 8px 10px;
+}
+
+.check-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .sr-only {

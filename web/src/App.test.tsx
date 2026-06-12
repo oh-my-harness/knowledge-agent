@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -15,14 +15,25 @@ function notFound() {
   return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
 }
 
+function localSettings() {
+  return {
+    llm: {
+      provider: "deepseek",
+      deepseek_api_key: null,
+      deepseek_model: "deepseek-v4-flash"
+    },
+    web_search: {
+      enabled: false,
+      provider: "manual"
+    }
+  };
+}
+
 function mockFetch(answer = "我已经收到你的问题。") {
   vi.stubGlobal(
     "fetch",
     vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === "/api/health") {
-        return ok({ status: "ok" });
-      }
       if (url === "/api/vault/index") {
         return ok({
           root: "fixture",
@@ -50,6 +61,9 @@ function mockFetch(answer = "我已经收到你的问题。") {
           ]
         });
       }
+      if (url === "/api/settings/local") {
+        return ok(localSettings());
+      }
       if (url === "/api/ask/sessions") {
         return ok([{ id: "default", name: "默认会话", updated_at: null }]);
       }
@@ -73,9 +87,6 @@ function mockAskFailure() {
     "fetch",
     vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === "/api/health") {
-        return ok({ status: "ok" });
-      }
       if (url === "/api/ask/sessions") {
         return ok([{ id: "default", name: "默认会话", updated_at: null }]);
       }
@@ -91,11 +102,12 @@ function mockAskFailure() {
 }
 
 describe("App", () => {
-  it("loads service status", async () => {
+  it("starts on the ask page without service status navigation", async () => {
     mockFetch();
     render(<App />);
 
-    await waitFor(() => expect(screen.getByText("服务在线")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "服务状态" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "提问" })).toBeInTheDocument();
   });
 
   it("shows vault notes", async () => {
@@ -119,11 +131,38 @@ describe("App", () => {
     expect(screen.getByText("Missing target [[LLM Harness]]")).toBeInTheDocument();
   });
 
+  it("loads and saves local settings", async () => {
+    mockFetch();
+    render(<App />);
+
+    await userEvent.click(screen.getByRole("button", { name: "设置" }));
+    await userEvent.clear(await screen.findByLabelText("模型名"));
+    await userEvent.type(screen.getByLabelText("模型名"), "deepseek-chat");
+    await userEvent.click(screen.getByRole("checkbox", { name: "启用网页搜索工具" }));
+    await userEvent.click(screen.getByRole("button", { name: "保存设置" }));
+
+    expect(fetch).toHaveBeenCalledWith("/api/settings/local", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        llm: {
+          provider: "deepseek",
+          deepseek_api_key: null,
+          deepseek_model: "deepseek-chat"
+        },
+        web_search: {
+          enabled: true,
+          provider: "manual"
+        }
+      })
+    });
+    expect(await screen.findByText("设置已保存。LLM 配置会在服务重启后用于新 runner。")).toBeInTheDocument();
+  });
+
   it("asks a question with Enter and shows the assistant reply", async () => {
     mockFetch();
     render(<App />);
 
-    await userEvent.click(screen.getByRole("button", { name: "提问" }));
     await screen.findAllByText("默认会话");
     await userEvent.type(screen.getByLabelText("问题"), "什么是 Agent Harness？{enter}");
 
@@ -140,7 +179,6 @@ describe("App", () => {
     mockFetch("## 结论\n\n- 第一条\n- 第二条\n\n```ts\nconst ok = true;\n```");
     render(<App />);
 
-    await userEvent.click(screen.getByRole("button", { name: "提问" }));
     await userEvent.type(screen.getByLabelText("问题"), "给我 Markdown{enter}");
 
     expect(await screen.findByRole("heading", { name: "结论", level: 2 })).toBeInTheDocument();
@@ -153,7 +191,6 @@ describe("App", () => {
     mockFetch();
     render(<App />);
 
-    await userEvent.click(screen.getByRole("button", { name: "提问" }));
     const input = await screen.findByLabelText("问题");
     await userEvent.type(input, "第一行{shift>}{enter}{/shift}第二行");
 
@@ -165,7 +202,6 @@ describe("App", () => {
     mockAskFailure();
     render(<App />);
 
-    await userEvent.click(screen.getByRole("button", { name: "提问" }));
     await screen.findAllByText("默认会话");
     await userEvent.type(screen.getByLabelText("问题"), "测试失败");
     await userEvent.click(screen.getByRole("button", { name: "发送" }));

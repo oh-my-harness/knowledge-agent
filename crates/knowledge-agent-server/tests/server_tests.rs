@@ -65,6 +65,49 @@ async fn maintenance_scan_errors_for_missing_vault() {
 }
 
 #[tokio::test]
+async fn local_settings_can_be_saved_and_loaded() {
+    let vault = tempfile::tempdir().expect("tempdir");
+    let app = build_router(AppState::new_with_fake_ask_runner(
+        vault.path().to_path_buf(),
+        "fake llm answer",
+    ));
+
+    let save_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/settings/local")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"llm":{"provider":"deepseek","deepseek_api_key":"secret","deepseek_model":"deepseek-chat"},"web_search":{"enabled":true,"provider":"duckduckgo"}}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_response.status(), StatusCode::OK);
+
+    let load_response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/settings/local")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(load_response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(load_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["llm"]["deepseek_model"], "deepseek-chat");
+    assert_eq!(json["web_search"]["enabled"], true);
+}
+
+#[tokio::test]
 async fn ask_returns_runner_answer() {
     let vault = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../knowledge-agent-core/tests/fixtures/basic-vault");

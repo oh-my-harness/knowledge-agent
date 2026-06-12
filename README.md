@@ -60,7 +60,15 @@ cargo run -p knowledge-agent-cli -- serve . --port 3030
 
 `DEEPSEEK_MODEL` 可省略，默认使用 `deepseek-v4-flash`。
 
-如果没有设置 `DEEPSEEK_API_KEY`，`/api/ask` 会返回明确错误。API key 属于个人配置，不应提交到 Git；后续会迁移到 `.knowledge-agent/local.toml`。
+如果没有设置 `DEEPSEEK_API_KEY`，`/api/ask` 会返回明确错误。API key 属于个人配置，不应提交到 Git。
+
+Web 设置页会读写：
+
+```text
+.knowledge-agent/local.toml
+```
+
+该文件保存本机 LLM provider、DeepSeek API key、模型名和网页搜索配置。环境变量仍可覆盖对应配置；保存后的 LLM 配置会在服务重启后用于新 runner。
 
 聊天会话由 `llm-harness-core` 的 session 机制保存到：
 

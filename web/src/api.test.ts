@@ -3,11 +3,13 @@ import {
   askVault,
   createAskSession,
   getAskSessionMessages,
-  getHealth,
+  getLocalSettings,
   getVaultIndex,
   listAskSessions,
-  runMaintenanceScan
+  runMaintenanceScan,
+  saveLocalSettings
 } from "./api";
+import type { LocalSettings } from "./types";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -25,15 +27,38 @@ function mockFetch(body: unknown, ok = true) {
   );
 }
 
-describe("api client", () => {
-  it("loads health", async () => {
-    mockFetch({ status: "ok" });
-    await expect(getHealth()).resolves.toEqual({ status: "ok" });
-  });
+const settings: LocalSettings = {
+  llm: {
+    provider: "deepseek",
+    deepseek_api_key: null,
+    deepseek_model: "deepseek-v4-flash"
+  },
+  web_search: {
+    enabled: false,
+    provider: "manual"
+  }
+};
 
+describe("api client", () => {
   it("loads vault index", async () => {
     mockFetch({ root: "vault", notes: [] });
     await expect(getVaultIndex()).resolves.toEqual({ root: "vault", notes: [] });
+  });
+
+  it("loads and saves local settings", async () => {
+    mockFetch(settings);
+    await expect(getLocalSettings()).resolves.toEqual(settings);
+
+    mockFetch({ ...settings, web_search: { enabled: true, provider: "manual" } });
+    await expect(saveLocalSettings({ ...settings, web_search: { enabled: true, provider: "manual" } })).resolves.toEqual({
+      ...settings,
+      web_search: { enabled: true, provider: "manual" }
+    });
+    expect(fetch).toHaveBeenCalledWith("/api/settings/local", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...settings, web_search: { enabled: true, provider: "manual" } })
+    });
   });
 
   it("runs maintenance scan", async () => {
@@ -83,6 +108,6 @@ describe("api client", () => {
 
   it("throws useful error for failed requests", async () => {
     mockFetch("failed", false);
-    await expect(getHealth()).rejects.toThrow("GET /api/health failed with 500");
+    await expect(getVaultIndex()).rejects.toThrow("GET /api/vault/index failed with 500");
   });
 });
